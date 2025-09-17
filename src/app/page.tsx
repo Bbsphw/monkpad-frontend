@@ -1,25 +1,32 @@
 import Sidebar from "@/components/Sidebar"
-import Navbar from "@/components/Navbar"
-import CardSummary from "@/components/ui/CardSummary"
-import LineChartSection from "@/components/ui/LineChartSection"
-import PieChartSection from "@/components/ui/PieChartSection"
-import TransactionList from "@/components/ui/TransactionList"
+import Navbar from "@/components/navbar"
+import CardSummary from "@/components/ui/card-summary"
+import LineChartSection from "@/components/ui/line-chart"
+import PieChartSection from "@/components/ui/pie-chart"
+import TransactionList from "@/components/ui/transaction-list"
 
 export default function Dashboard() {
   return (
-    <div className="flex min-h-screen bg-muted/30">
-      <Sidebar />
+    <div className="flex h-screen overflow-hidden bg-muted/30">
+      {/* Sidebar คงที่ (ไม่เลื่อน) */}
+      <aside className="w-64 shrink-0 sticky top-0 h-screen">
+        <Sidebar />
+      </aside>
 
-      <div className="flex-1 flex flex-col">
-        <Navbar />
+      {/* คอลัมน์ขวา */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Navbar คงที่ด้านบนของคอลัมน์ขวา */}
+        <div className="sticky top-0 z-20">
+          <Navbar />
+        </div>
 
-        <main className="p-6 space-y-6">
+        {/* เนื้อหาที่เลื่อนได้ */}
+        <main className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* สรุปการเงิน */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <CardSummary title="รายรับทั้งหมด" value="฿50,000" change="+12.5%" type="income" />
             <CardSummary title="รายจ่ายทั้งหมด" value="฿30,000" change="-8.5%" type="expense" />
             <CardSummary title="ยอดคงเหลือ" value="฿20,000" type="balance" />
-            <CardSummary title="อัตราการออม" value="40.0%" type="saving" />
           </div>
 
           {/* กราฟ */}

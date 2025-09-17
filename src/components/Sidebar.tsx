@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 
 export default function Sidebar() {
   return (
-    <div className="w-64 bg-white shadow-lg flex flex-col">
+    <div className="h-full  overflow-y-auto w-64 bg-white shadow-lg flex flex-col">
       <div className="p-6 font-bold text-xl">MonkPad</div>
       <nav className="flex-1 space-y-2 px-4">
         <Button variant="ghost" className="w-full justify-start"><Home className="mr-2 h-4 w-4"/> ภาพรวม</Button>
