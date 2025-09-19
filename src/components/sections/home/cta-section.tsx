@@ -27,7 +27,7 @@ export default function CtaSection() {
 
             <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
               <Button size="lg" variant="secondary" asChild>
-                <Link href="/auth/sign-up" prefetch={false}>
+                <Link href="/sign-up" prefetch={false}>
                   <Users className="mr-2 h-5 w-5" aria-hidden="true" />
                   เริ่มใช้งานฟรีวันนี้
                 </Link>
@@ -39,7 +39,7 @@ export default function CtaSection() {
                 // className="border-primary-foreground/70 text-primary-foreground hover:bg-primary-foreground hover:text-primary"
                 asChild
               >
-                <Link href="/auth/sign-in" prefetch={false}>
+                <Link href="/sign-in" prefetch={false}>
                   <LogIn className="mr-2 h-5 w-5" aria-hidden="true" />
                   เข้าสู่ระบบ
                 </Link>

@@ -45,14 +45,14 @@ export default function HeroSection() {
               asChild
               /* keep your custom styles if defined */ className="shadow-sm"
             >
-              <Link href="/auth/sign-up" prefetch={false}>
+              <Link href="/sign-up" prefetch={false}>
                 เริ่มใช้งานฟรี
                 <ArrowRight className="ml-2 h-5 w-5" aria-hidden="true" />
               </Link>
             </Button>
 
             <Button size="lg" variant="outline" asChild>
-              <Link href="/auth/sign-in" prefetch={false}>
+              <Link href="/sign-in" prefetch={false}>
                 <FileUp className="mr-2 h-5 w-5" aria-hidden="true" />
                 ดูตัวอย่างการทำงาน
               </Link>
