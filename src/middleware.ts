@@ -8,7 +8,7 @@ export default withAuth(
     const { pathname } = req.nextUrl;
 
     if (pathname.startsWith("/admin")) {
-      const role = (token as any)?.role ?? "user";
+      const role = token?.role ?? "user";
       if (role !== "admin") return NextResponse.redirect(new URL("/", req.url));
     }
     return NextResponse.next();

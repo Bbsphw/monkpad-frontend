@@ -12,8 +12,8 @@ export default function SiteHeader() {
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
           {/* Brand Logo */}
-          <Link href="/" aria-label="กลับหน้าแรก">
-            <SiteLogo href={null} size="md" iconStyle="mark" />
+          <Link href="/">
+            <SiteLogo href={null} />
           </Link>
 
           {/* Primary actions */}

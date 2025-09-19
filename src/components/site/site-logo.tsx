@@ -4,14 +4,19 @@
 import Link from "next/link";
 import { EmojioneMonotoneMonkey } from "@/components/icons/emojione-monotone-monkey";
 import { cn } from "@/lib/utils";
+import type { ComponentType, MouseEventHandler, SVGProps } from "react";
 
 type SiteLogoProps = {
   href?: string | null; // null = ไม่เป็นลิงก์
   showIcon?: boolean; // แสดง/ซ่อนไอคอน
   showWordmark?: boolean; // แสดง/ซ่อนข้อความ MONKPAD
   size?: "sm" | "md" | "lg"; // ขนาดโลโก้
-  iconStyle?: "mark" | "plain"; // mark = มีพื้นหลังกล่อง, plain = ไอคอนล้วน
+  iconStyle?: "mark" | "plain"; // mark = กล่องพื้นหลัง, plain = ไอคอนล้วน
   className?: string;
+  onClick?: MouseEventHandler<
+    HTMLAnchorElement | HTMLButtonElement | HTMLSpanElement
+  >;
+  Icon?: ComponentType<SVGProps<SVGSVGElement>>; // ไอคอนกำหนดเอง
 };
 
 export default function SiteLogo({
@@ -21,6 +26,8 @@ export default function SiteLogo({
   size = "md",
   iconStyle = "mark",
   className = "",
+  onClick,
+  Icon = EmojioneMonotoneMonkey,
 }: SiteLogoProps) {
   const wordmarkSize =
     size === "sm"
@@ -33,9 +40,13 @@ export default function SiteLogo({
   const iconSize =
     size === "sm" ? "h-4 w-4" : size === "lg" ? "h-6 w-6" : "h-5 w-5";
 
+  const containerClass = cn(
+    "inline-flex items-center gap-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+    className
+  );
+
   const IconNode = showIcon ? (
     iconStyle === "mark" ? (
-      // กล่องพื้นหลัง: ใช้ text-primary-foreground ให้คอนทราสต์กับ bg-primary
       <span
         className={cn(
           "inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground",
@@ -43,15 +54,14 @@ export default function SiteLogo({
         )}
         aria-hidden="true"
       >
-        <EmojioneMonotoneMonkey className={iconSize} />
+        <Icon className={iconSize} />
       </span>
     ) : (
-      // ไอคอนล้วน: ให้สีตามธีม/แบรนด์
       <span
         className="inline-flex items-center justify-center text-primary"
         aria-hidden="true"
       >
-        <EmojioneMonotoneMonkey className={iconSize} />
+        <Icon className={iconSize} />
       </span>
     )
   ) : null;
@@ -66,25 +76,47 @@ export default function SiteLogo({
     <span className="sr-only">MonkPad</span>
   );
 
-  const content = (
-    <span className={cn("inline-flex items-center gap-2", className)}>
+  const ariaLabel = !showWordmark ? "กลับหน้าแรก MonkPad" : undefined;
+
+  // 1) เป็นลิงก์ (ค่าเริ่มต้น)
+  if (href) {
+    return (
+      <Link
+        href={href}
+        prefetch={false}
+        className={containerClass}
+        {...(ariaLabel ? { "aria-label": ariaLabel } : {})}
+        onClick={onClick}
+      >
+        {IconNode}
+        {WordmarkNode}
+      </Link>
+    );
+  }
+
+  // 2) ไม่ใช่ลิงก์ แต่มี onClick → ปุ่มที่เข้าถึงได้ด้วยคีย์บอร์ด
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        className={containerClass}
+        onClick={onClick}
+        {...(ariaLabel ? { "aria-label": ariaLabel } : {})}
+      >
+        {IconNode}
+        {WordmarkNode}
+      </button>
+    );
+  }
+
+  // 3) ไม่ใช่ลิงก์และไม่มี onClick → สแปนธรรมดา
+  return (
+    <span
+      className={containerClass}
+      {...(ariaLabel ? { "aria-label": ariaLabel } : {})}
+    >
       {IconNode}
       {WordmarkNode}
     </span>
-  );
-
-  // ถ้ามีข้อความมองเห็นอยู่แล้ว ไม่ต้องใส่ aria-label ซ้ำ
-  const linkAriaLabel = !showWordmark ? "กลับหน้าแรก MonkPad" : undefined;
-
-  return href ? (
-    <Link
-      href={href}
-      prefetch={false}
-      {...(linkAriaLabel ? ({ "aria-label": linkAriaLabel } as any) : {})}
-    >
-      {content}
-    </Link>
-  ) : (
-    content
   );
 }
