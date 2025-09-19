@@ -1,5 +1,6 @@
 // components/site-footer.tsx
 import Link from "next/link";
+import SiteLogo from "./site-logo";
 
 export default function SiteFooter() {
   const startYear = 2024;
@@ -14,19 +15,11 @@ export default function SiteFooter() {
           {/* Brand */}
           <Link
             href="/"
-            aria-label="ไปหน้าแรก MonkPad"
             className="mb-4 inline-flex items-center justify-center gap-2"
             prefetch={false}
+            aria-label="ไปหน้าแรก MonkPad" // ใส่ได้ถ้า Wordmark ซ่อน; ถ้าโชว์ Wordmark จะไม่จำเป็น
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <span
-                className="text-sm font-bold text-primary-foreground"
-                aria-hidden="true"
-              >
-                M
-              </span>
-            </div>
-            <span className="text-xl font-bold text-foreground">MonkPad</span>
+            <SiteLogo href={null} size="md" iconStyle="mark" />
           </Link>
 
           <p className="text-pretty text-muted-foreground mb-6">
