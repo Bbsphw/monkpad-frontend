@@ -2,7 +2,7 @@
 import { getServerSession, type NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { z } from "zod";
-import type { Role } from "@/types/user";
+import type { Role, User } from "@/types/user";
 
 // 🟢 dev/test
 import { mockLogin } from "./mock-auth";
@@ -44,14 +44,15 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.id = (user as any).id;
-        token.role = (user as any).role as Role;
+        const u = user as User;
+        token.id = u.id;
+        token.role = u.role;
       }
       return token;
     },
     async session({ session, token }) {
-      session.user.id = token.id as string;
-      session.user.role = (token.role as Role) ?? "user";
+      session.user.id = token.id;
+      session.user.role = token.role as Role;
       return session;
     },
   },

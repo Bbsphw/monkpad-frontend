@@ -19,7 +19,7 @@ export default function SiteFooter() {
             prefetch={false}
             aria-label="ไปหน้าแรก MonkPad" // ใส่ได้ถ้า Wordmark ซ่อน; ถ้าโชว์ Wordmark จะไม่จำเป็น
           >
-            <SiteLogo href={null} size="md" iconStyle="mark" />
+            <SiteLogo href={null} />
           </Link>
 
           <p className="text-pretty text-muted-foreground mb-6">

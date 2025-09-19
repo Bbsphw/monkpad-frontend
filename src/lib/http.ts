@@ -1,32 +1,35 @@
 // src/lib/http.ts
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
-export interface RequestJSONOptions<T> {
+export interface RequestJSONOptions<TBody> {
   method?: HttpMethod;
   headers?: Record<string, string>;
-  body?: T;
+  body?: TBody;
   timeoutMs?: number;
   retries?: number;
   cache?: RequestCache;
 }
 
-export async function fetchJSON<I, O>(
+type JsonLike = Record<string, unknown> | unknown[] | null;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export async function fetchJSON<TIn, TOut>(
   url: string,
   {
     method = "GET",
     headers,
     body,
-    timeoutMs = 15000,
+    timeoutMs = 15_000,
     retries = 0,
     cache = "no-store",
-  }: RequestJSONOptions<I> = {}
-): Promise<{
-  ok: boolean;
-  status: number;
-  data?: O;
-  error?: string;
-  raw?: unknown;
-}> {
+  }: RequestJSONOptions<TIn> = {}
+): Promise<
+  | { ok: true; status: number; data: TOut; raw: JsonLike | string }
+  | { ok: false; status: number; error: string; raw?: JsonLike | string }
+> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -35,61 +38,75 @@ export async function fetchJSON<I, O>(
       method,
       headers: {
         "Content-Type": "application/json",
-        ...(headers || {}),
+        ...(headers ?? {}),
       },
-      body: body ? JSON.stringify(body) : undefined,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
       signal: controller.signal,
       cache,
     });
 
-    const contentType = res.headers.get("content-type") || "";
+    const contentType = res.headers.get("content-type") ?? "";
     const isJson = contentType.includes("application/json");
-    const payload = isJson
-      ? await res.json().catch(() => null)
-      : await res.text().catch(() => "");
+    const payload: JsonLike | string = isJson
+      ? await res.json().catch<null>(() => null)
+      : await res.text().catch<string>(() => "");
 
     if (!res.ok) {
-      // เก็บรายละเอียด error ชัดๆ
-      const details = isJson
-        ? (payload as any)?.message ||
-          (payload as any)?.error ||
-          JSON.stringify(payload)
-        : String(payload);
+      let details = res.statusText;
+      if (isJson && isRecord(payload)) {
+        const msg = payload["message"] ?? payload["error"];
+        if (typeof msg === "string" && msg.trim().length > 0) {
+          details = msg;
+        } else {
+          try {
+            details = JSON.stringify(payload);
+          } catch {
+            /* noop */
+          }
+        }
+      } else if (
+        !isJson &&
+        typeof payload === "string" &&
+        payload.trim().length > 0
+      ) {
+        details = payload;
+      }
+
       return {
-        ok: false,
+        ok: false as const,
         status: res.status,
-        error: details || res.statusText,
+        error: details,
         raw: payload,
       };
     }
 
     return {
-      ok: true,
+      ok: true as const,
       status: res.status,
-      data: (payload as O) ?? ({} as O),
+      data: (payload as TOut) ?? ({} as TOut),
       raw: payload,
     };
   };
 
   try {
-    let lastErr: any;
+    let lastErr: unknown;
     for (let i = 0; i <= retries; i++) {
       try {
         return await attempt();
-      } catch (err) {
+      } catch (err: unknown) {
         lastErr = err;
         if (i === retries) throw err;
       }
     }
+    // should not reach
     throw lastErr;
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const isAbort = err instanceof Error && err.name === "AbortError";
+    const message = err instanceof Error ? err.message : "Network error";
     return {
-      ok: false,
+      ok: false as const,
       status: 0,
-      error:
-        err?.name === "AbortError"
-          ? "Request timed out"
-          : err?.message || "Network error",
+      error: isAbort ? "Request timed out" : message,
     };
   } finally {
     clearTimeout(timer);
