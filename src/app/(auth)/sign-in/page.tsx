@@ -1,4 +1,4 @@
-// src/app/(auth)/sign-in/page.tsx
+//src/app/(auth)/sign-in/page.tsx
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import SignInClient from "./signIn-client";
