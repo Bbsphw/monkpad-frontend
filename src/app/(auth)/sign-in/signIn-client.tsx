@@ -1,3 +1,4 @@
+//src/app/(auth)/sign-in/signIn-client.tsx
 "use client";
 
 import { useState } from "react";
@@ -22,7 +23,11 @@ import {
 import { Loading } from "@/components/common/loading";
 import { signInSchema, type SignInFormData } from "@/lib/validators";
 
-export default function SignInClient() {
+type Props = {
+  redirect?: string; // URL ที่จะไปหลังจากล็อกอินสำเร็จ
+};
+
+export default function SignInClient({ redirect }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
