@@ -1,33 +1,3 @@
-// // src/lib/api-auth.ts
-// type LoginInput = { identifier: string; password: string };
-
-// export async function apiLogin({ identifier, password }: LoginInput) {
-//   const base = process.env.NEXT_PUBLIC_API_URL;
-//   if (!base) throw new Error("NEXT_PUBLIC_API_URL not set");
-
-//   // แปลง identifier ให้ backend รู้ว่าเป็น username หรือ email
-//   const payload = identifier.includes("@")
-//     ? { email: identifier.trim().toLowerCase(), password }
-//     : { username: identifier.trim(), password };
-
-//   const res = await fetch(`${base}/users/login/`, {
-//     method: "POST",
-//     headers: { "Content-Type": "application/json" },
-//     body: JSON.stringify(payload),
-//     cache: "no-store",
-//   });
-
-//   if (!res.ok) throw new Error(await res.text());
-
-//   const user = await res.json();
-//   return {
-//     id: user.id ?? "1",
-//     name: user.username ?? user.email ?? identifier,
-//     email: user.email,
-//     role: user.role ?? "user",
-//   };
-// }
-
 // src/lib/api-auth.ts
 export type SignUpInput = { username: string; email: string; password: string };
 
