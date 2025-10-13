@@ -28,12 +28,12 @@ import { useTransactions } from "../_hooks/use-transactions";
  * sm: 2 คอลัมน์, xs: 1 คอลัมน์
  */
 
-type TxnType = "all" | "income" | "expense" | "transfer";
+type TxnType = "all" | "income" | "expense" ;
 const TXN_TYPES: readonly TxnType[] = [
   "all",
   "income",
   "expense",
-  "transfer",
+  
 ] as const;
 const isTxnType = (v: string): v is TxnType =>
   (TXN_TYPES as readonly string[]).includes(v);
@@ -70,7 +70,6 @@ export default function TransactionFilters(): React.JSX.Element {
             <SelectItem value="all">ทั้งหมด</SelectItem>
             <SelectItem value="income">Income</SelectItem>
             <SelectItem value="expense">Expense</SelectItem>
-            <SelectItem value="transfer">Transfer</SelectItem>
           </SelectContent>
         </Select>
       </div>

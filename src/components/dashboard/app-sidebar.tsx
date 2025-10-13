@@ -32,7 +32,7 @@ const navMain: NavItem[] = [
     url: "/transactions",
     icon: BadgeDollarSign,
   },
-  { title: "Reports", url: "/dashboard/reports", icon: ChartBar },
+  { title: "Reports", url: "/reports", icon: ChartBar },
 ];
 
 const user = {

@@ -9,8 +9,8 @@ import { UploadSlipDialog } from "@/components/upload/UploadSlipDialog";
 
 const PAGE_TITLES: Record<string, string> = {
   "/dashboard": "Dashboard",
-  "/dashboard/transactions": "Transactions",
-  "/dashboard/reports": "Reports",
+  "/transactions": "Transactions",
+  "/reports": "Reports",
 };
 
 export function SiteHeaderDashboard() {
