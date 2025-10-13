@@ -26,11 +26,10 @@ import {
 } from "lucide-react";
 
 const navMain: NavItem[] = [
-  { title: "Upload Slip", url: "/dashboard/upload", icon: ImageUp },
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   {
     title: "Transactions",
-    url: "/dashboard/transactions",
+    url: "/transactions",
     icon: BadgeDollarSign,
   },
   { title: "Reports", url: "/dashboard/reports", icon: ChartBar },
