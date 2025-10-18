@@ -1,7 +1,7 @@
 // src/app/(auth)/sign-in/signIn-client.tsx
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Controller, useForm, type SubmitHandler } from "react-hook-form";
@@ -21,6 +21,7 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Loading } from "@/components/common/loading";
+import { ForgotPasswordDialog } from "@/components/auth/forgot-password-dialog";
 
 /**
  * Schema:
@@ -36,6 +37,11 @@ const signInClientSchema = z.object({
 
 // ✅ ให้ฟอร์มใช้ input type ของ schema (ตรงกับ resolver)
 type SignInClientForm = z.input<typeof signInClientSchema>;
+
+function isEmailLike(v: string) {
+  // เบา ๆ พอสำหรับ client (backend ตรวจจริงอีกชั้น)
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+}
 
 export default function SignInClient() {
   const router = useRouter();
@@ -57,18 +63,24 @@ export default function SignInClient() {
     setError,
     clearErrors,
     control,
+    watch,
     formState: { errors },
   } = useForm<SignInClientForm>({
     resolver: zodResolver(signInClientSchema),
-    // ⚠️ แม้ type จะเป็น remember?: boolean แต่เราตั้งค่า defaultValues เป็น false ไว้
     defaultValues: { identifier: "", password: "", remember: false },
     mode: "onTouched",
   });
 
+  // ใช้เฉพาะกรณีที่ identifier เป็นอีเมลจริงเท่านั้น → ค่อยส่งให้ dialog เป็น presetEmail
+  const identifier = watch("identifier");
+  const presetEmail = useMemo(
+    () => (isEmailLike(identifier ?? "") ? identifier.trim() : ""),
+    [identifier]
+  );
+
   const onSubmit: SubmitHandler<SignInClientForm> = async (data) => {
     setSubmitting(true);
     try {
-      // บังคับ remember ให้เป็น boolean เสมอ
       const remember = !!data.remember;
 
       const res = await fetch("/api/auth/sign-in", {
@@ -188,7 +200,7 @@ export default function SignInClient() {
               )}
             </div>
 
-            {/* remember me */}
+            {/* remember + forgot */}
             <div className="flex items-center justify-between">
               <Controller
                 name="remember"
@@ -198,7 +210,6 @@ export default function SignInClient() {
                     <input
                       id="remember"
                       type="checkbox"
-                      // field.value อาจ undefined ได้ → บังคับเป็น boolean
                       checked={!!field.value}
                       onChange={(e) => field.onChange(e.target.checked)}
                     />
@@ -206,13 +217,20 @@ export default function SignInClient() {
                   </label>
                 )}
               />
-              <Link
-                href="/forgot-password"
-                className="text-sm text-primary hover:text-primary-hover"
-                prefetch={false}
-              >
-                ลืมรหัสผ่าน?
-              </Link>
+
+              {/* ✅ ใช้ Dialog ลืมรหัสผ่าน (สองขั้นตอน) */}
+              <ForgotPasswordDialog
+                asChild
+                trigger={
+                  <button
+                    type="button"
+                    className="text-sm text-primary hover:underline"
+                  >
+                    ลืมรหัสผ่าน?
+                  </button>
+                }
+                presetEmail={presetEmail || undefined}
+              />
             </div>
 
             <Button

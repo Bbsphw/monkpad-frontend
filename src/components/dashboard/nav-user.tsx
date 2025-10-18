@@ -1,8 +1,6 @@
-// src/components/dashboard/new/nav-user.tsx
+// src/components/dashboard/nav-user.tsx
 "use client";
 
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 import {
   CreditCard,
   EllipsisVertical,
@@ -28,14 +26,16 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
+import { ChangePasswordDialog } from "@/components/account/change-password-dialog";
+import { ChangeEmailDialog } from "@/components/account/change-email-dialog";
+import { ChangeUsernameDialog } from "@/components/account/change-username-dialog";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+
 export function NavUser({
   user,
 }: {
-  user: {
-    name: string;
-    email: string;
-    avatar: string;
-  };
+  user: { name: string; email: string; avatar: string };
 }) {
   const { isMobile } = useSidebar();
   const router = useRouter();
@@ -43,16 +43,13 @@ export function NavUser({
   const onLogout = async () => {
     try {
       const res = await fetch("/api/auth/logout", { method: "POST" });
-      if (!res.ok) throw new Error("Logout failed");
-      toast.success("ออกจากระบบแล้ว");
+      if (!res.ok) throw new Error();
+      toast.success("ออกจากระบบสำเร็จ");
       router.replace("/sign-in");
     } catch {
       toast.error("ออกจากระบบไม่สำเร็จ");
     }
   };
-
-  const fallback =
-    user.name?.trim()?.charAt(0)?.toUpperCase() || user.email?.charAt(0) || "U";
 
   return (
     <SidebarMenu>
@@ -66,7 +63,7 @@ export function NavUser({
               <Avatar className="h-8 w-8 rounded-lg grayscale">
                 <AvatarImage src={user.avatar} alt={user.name} />
                 <AvatarFallback className="rounded-lg">
-                  {fallback}
+                  {user.name?.slice(0, 2).toUpperCase() || "US"}
                 </AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
@@ -78,6 +75,7 @@ export function NavUser({
               <EllipsisVertical className="ml-auto size-4" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
+
           <DropdownMenuContent
             className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
             side={isMobile ? "bottom" : "right"}
@@ -89,7 +87,7 @@ export function NavUser({
                 <Avatar className="h-8 w-8 rounded-lg">
                   <AvatarImage src={user.avatar} alt={user.name} />
                   <AvatarFallback className="rounded-lg">
-                    {fallback}
+                    {user.name?.slice(0, 2).toUpperCase() || "US"}
                   </AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
@@ -100,22 +98,41 @@ export function NavUser({
                 </div>
               </div>
             </DropdownMenuLabel>
+
             <DropdownMenuSeparator />
+
             <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <UserCircle />
-                Account
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <CreditCard />
-                Billing
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <BellRing />
-                Notifications
-              </DropdownMenuItem>
+              <ChangeUsernameDialog
+                asChild
+                trigger={
+                  <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                    <UserCircle />
+                    เปลี่ยนชื่อผู้ใช้
+                  </DropdownMenuItem>
+                }
+              />
+              <ChangeEmailDialog
+                asChild
+                trigger={
+                  <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                    <CreditCard />
+                    เปลี่ยนอีเมล
+                  </DropdownMenuItem>
+                }
+              />
+              <ChangePasswordDialog
+                asChild
+                trigger={
+                  <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                    <BellRing />
+                    เปลี่ยนรหัสผ่าน
+                  </DropdownMenuItem>
+                }
+              />
             </DropdownMenuGroup>
+
             <DropdownMenuSeparator />
+
             <DropdownMenuItem onClick={onLogout}>
               <LogOut />
               Log out
