@@ -1,3 +1,4 @@
+// src/app/layout.tsx
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -20,11 +21,18 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
+  // ใช้ที่ build-time (safe สำหรับ <head/>)
+  const BE = process.env.NEXT_PUBLIC_API_BASE_URL;
+
   return (
     <html lang="th">
+      <head>
+        {BE ? <link rel="dns-prefetch" href={BE} /> : null}
+        {BE ? <link rel="preconnect" href={BE} crossOrigin="" /> : null}
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

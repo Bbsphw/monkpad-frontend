@@ -1,13 +1,13 @@
-//src/app/(auth)/sign-in/signIn-client.tsx
+// src/app/(auth)/sign-in/signIn-client.tsx
 "use client";
 
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { Controller, useForm, type SubmitHandler } from "react-hook-form";
+import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Eye, EyeOff, LogIn } from "lucide-react";
-import { signIn } from "next-auth/react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -21,15 +21,33 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Loading } from "@/components/common/loading";
-import { signInSchema, type SignInFormData } from "@/lib/validators";
 
-type Props = {
-  redirect?: string; // URL ที่จะไปหลังจากล็อกอินสำเร็จ
-};
+/**
+ * Schema:
+ * - remember ใช้ .default(false) → zod "input type" = boolean | undefined
+ * - z.infer<T> = "output type" → boolean
+ * resolver ของ zodResolver ใช้ "input type" → เราจึงต้องตั้ง useForm เป็น z.input<typeof schema>
+ */
+const signInClientSchema = z.object({
+  identifier: z.string().min(1, "กรุณากรอกอีเมลหรือชื่อผู้ใช้"),
+  password: z.string().min(1, "กรุณากรอกรหัสผ่าน"),
+  remember: z.boolean().default(false),
+});
 
-export default function SignInClient({ redirect }: Props) {
+// ✅ ให้ฟอร์มใช้ input type ของ schema (ตรงกับ resolver)
+type SignInClientForm = z.input<typeof signInClientSchema>;
+
+export default function SignInClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  // ป้องกัน open-redirect
+  const nextParam = searchParams.get("next");
+  const next =
+    typeof nextParam === "string" && nextParam.startsWith("/")
+      ? nextParam
+      : "/dashboard";
+
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -37,39 +55,54 @@ export default function SignInClient({ redirect }: Props) {
     register,
     handleSubmit,
     setError,
+    clearErrors,
+    control,
     formState: { errors },
-  } = useForm<SignInFormData>({
-    resolver: zodResolver(signInSchema),
-    defaultValues: { identifier: "", password: "" },
+  } = useForm<SignInClientForm>({
+    resolver: zodResolver(signInClientSchema),
+    // ⚠️ แม้ type จะเป็น remember?: boolean แต่เราตั้งค่า defaultValues เป็น false ไว้
+    defaultValues: { identifier: "", password: "", remember: false },
     mode: "onTouched",
   });
 
-  const onSubmit = async (data: SignInFormData) => {
+  const onSubmit: SubmitHandler<SignInClientForm> = async (data) => {
     setSubmitting(true);
-    const callbackUrl = searchParams.get("redirect") || "/dashboard";
+    try {
+      // บังคับ remember ให้เป็น boolean เสมอ
+      const remember = !!data.remember;
 
-    const res = await signIn("credentials", {
-      redirect: false,
-      identifier: data.identifier,
-      password: data.password,
-      callbackUrl,
-    });
-
-    setSubmitting(false);
-
-    if (!res || res.error) {
-      const msg = res?.error || "ชื่อผู้ใช้/อีเมล หรือรหัสผ่านไม่ถูกต้อง";
-      // ❗ ทำให้ขึ้นแดงทั้งสองช่อง
-      setError("identifier", {
-        message: "กรุณาตรวจสอบชื่อผู้ใช้หรืออีเมลอีกครั้ง",
+      const res = await fetch("/api/auth/sign-in", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: data.identifier,
+          password: data.password,
+          remember,
+        }),
       });
-      setError("password", { message: "กรุณาตรวจสอบรหัสผ่านอีกครั้ง" });
-      toast.error("เข้าสู่ระบบไม่สำเร็จ", { description: msg });
-      return;
-    }
 
-    toast.success("เข้าสู่ระบบสำเร็จ");
-    router.replace(res.url ?? callbackUrl);
+      const json = await res.json().catch(() => null);
+
+      if (!res.ok || !json?.ok) {
+        const msg =
+          json?.error?.message || "ชื่อผู้ใช้/อีเมล หรือรหัสผ่านไม่ถูกต้อง";
+        setError("identifier", {
+          message: "กรุณาตรวจสอบชื่อผู้ใช้หรืออีเมลอีกครั้ง",
+        });
+        setError("password", { message: "กรุณาตรวจสอบรหัสผ่านอีกครั้ง" });
+        toast.error("เข้าสู่ระบบไม่สำเร็จ", { description: msg });
+        return;
+      }
+
+      toast.success("เข้าสู่ระบบสำเร็จ");
+      router.replace(next);
+    } catch (err: any) {
+      toast.error("เข้าสู่ระบบไม่สำเร็จ", {
+        description: err?.message ?? "เกิดข้อผิดพลาด",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -91,6 +124,7 @@ export default function SignInClient({ redirect }: Props) {
             className="space-y-4"
             noValidate
           >
+            {/* identifier */}
             <div className="space-y-2">
               <Label htmlFor="identifier">อีเมลหรือชื่อผู้ใช้</Label>
               <Input
@@ -98,6 +132,10 @@ export default function SignInClient({ redirect }: Props) {
                 placeholder="user@example.com หรือ username"
                 autoComplete="username"
                 {...register("identifier")}
+                onChange={(e) => {
+                  clearErrors("identifier");
+                  register("identifier").onChange(e);
+                }}
                 aria-invalid={!!errors.identifier}
                 className={errors.identifier ? "border-destructive" : ""}
               />
@@ -108,6 +146,7 @@ export default function SignInClient({ redirect }: Props) {
               )}
             </div>
 
+            {/* password */}
             <div className="space-y-2">
               <Label htmlFor="password">รหัสผ่าน</Label>
               <div className="relative">
@@ -117,6 +156,10 @@ export default function SignInClient({ redirect }: Props) {
                   placeholder="••••••••"
                   autoComplete="current-password"
                   {...register("password")}
+                  onChange={(e) => {
+                    clearErrors("password");
+                    register("password").onChange(e);
+                  }}
                   aria-invalid={!!errors.password}
                   className={
                     (errors.password ? "border-destructive " : "") + "pr-10"
@@ -145,6 +188,33 @@ export default function SignInClient({ redirect }: Props) {
               )}
             </div>
 
+            {/* remember me */}
+            <div className="flex items-center justify-between">
+              <Controller
+                name="remember"
+                control={control}
+                render={({ field }) => (
+                  <label className="flex items-center gap-2 select-none">
+                    <input
+                      id="remember"
+                      type="checkbox"
+                      // field.value อาจ undefined ได้ → บังคับเป็น boolean
+                      checked={!!field.value}
+                      onChange={(e) => field.onChange(e.target.checked)}
+                    />
+                    <span className="text-sm">จำฉันไว้ (7 วัน)</span>
+                  </label>
+                )}
+              />
+              <Link
+                href="/forgot-password"
+                className="text-sm text-primary hover:text-primary-hover"
+                prefetch={false}
+              >
+                ลืมรหัสผ่าน?
+              </Link>
+            </div>
+
             <Button
               type="submit"
               className="w-full gradient-primary"
@@ -156,17 +226,18 @@ export default function SignInClient({ redirect }: Props) {
                 "เข้าสู่ระบบ"
               )}
             </Button>
-          </form>
 
-          <div className="mt-6 text-center text-sm">
-            <span className="text-muted-foreground">ยังไม่มีบัญชี? </span>
-            <Link
-              href="/sign-up"
-              className="text-primary hover:text-primary-hover font-medium"
-            >
-              สมัครสมาชิก
-            </Link>
-          </div>
+            <div className="mt-6 text-center text-sm">
+              <span className="text-muted-foreground">ยังไม่มีบัญชี? </span>
+              <Link
+                href="/sign-up"
+                className="text-primary hover:text-primary-hover font-medium"
+                prefetch={false}
+              >
+                สมัครสมาชิก
+              </Link>
+            </div>
+          </form>
         </CardContent>
       </Card>
     </div>

@@ -1,7 +1,4 @@
-// ─────────────────────────────────────────────────────────────
-// FILE: components/dashboard/new/app-sidebar.tsx (CLIENT COMPONENT)
-// Purpose: Sidebar shell; keep data & icons on client to avoid RSC serialization errors.
-// ─────────────────────────────────────────────────────────────
+// src/components/dashboard/new/app-sidebar.tsx
 "use client";
 
 import Link from "next/link";
@@ -26,22 +23,34 @@ import {
 } from "lucide-react";
 
 const navMain: NavItem[] = [
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   {
+    kind: "link",
+    title: "Dashboard",
+    url: "/dashboard",
+    icon: LayoutDashboard,
+  },
+  {
+    kind: "link",
     title: "Transactions",
     url: "/transactions",
     icon: BadgeDollarSign,
   },
-  { title: "Reports", url: "/reports", icon: ChartBar },
+  { kind: "link", title: "Reports", url: "/reports", icon: ChartBar },
+  {
+    kind: "action",
+    title: "Upload Slip",
+    action: "upload-slip",
+    icon: ImageUp,
+  },
 ];
 
-const user = {
-  name: "shadcn",
-  email: "m@example.com",
-  avatar: "/avatars/shadcn.jpg",
+export type AppSidebarUser = {
+  name: string;
+  email: string;
+  avatar: string;
 };
 
-export function AppSidebar() {
+export function AppSidebar({ user }: { user: AppSidebarUser }) {
   return (
     <Sidebar>
       <SidebarHeader />

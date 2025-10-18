@@ -1,3 +1,5 @@
+// src/components/auth/auth-card.tsx
+
 import { type ReactNode } from "react";
 import {
   Card,
