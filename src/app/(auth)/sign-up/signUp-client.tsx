@@ -1,9 +1,11 @@
+// src/app/(auth)/sign-up/signUp-client.tsx
 "use client";
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm, type SubmitHandler } from "react-hook-form";
+import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { CheckCircle2, XCircle, Eye, EyeOff, UserPlus } from "lucide-react";
@@ -19,11 +21,32 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Loading } from "@/components/common/loading";
-import { signUpSchema, type SignUpFormData } from "@/lib/validators";
-import { registerUserAction } from "./actions";
+
+const signUpSchema = z
+  .object({
+    username: z.string().min(3, "ต้องมีอย่างน้อย 3 ตัวอักษร"),
+    email: z.string().email("รูปแบบอีเมลไม่ถูกต้อง"),
+    password: z.string().min(8, "อย่างน้อย 8 ตัวอักษร"),
+    confirmPassword: z.string().min(1, "กรุณายืนยันรหัสผ่าน"),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    path: ["confirmPassword"],
+    message: "รหัสผ่านไม่ตรงกัน",
+  });
+
+type SignUpFormData = z.infer<typeof signUpSchema>;
 
 export default function SignUpClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // หลังสมัครเสร็จ → เด้งไปหน้า next (ค่า default /sign-in)
+  const nextParam = searchParams.get("next");
+  const next =
+    typeof nextParam === "string" && nextParam.startsWith("/")
+      ? nextParam
+      : "/sign-in";
+
   const [submitting, setSubmitting] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
   const [showPwd2, setShowPwd2] = useState(false);
@@ -79,24 +102,37 @@ export default function SignUpClient() {
   const onSubmit: SubmitHandler<SignUpFormData> = async (values) => {
     setSubmitting(true);
     try {
-      const result = await registerUserAction(values);
+      const res = await fetch("/api/auth/sign-up", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: values.username.trim(),
+          email: values.email.trim(),
+          password: values.password,
+        }),
+      });
 
-      if (!result.success) {
-        if (result.fieldErrors) {
-          Object.entries(result.fieldErrors).forEach(([field, msgs]) => {
-            if (msgs?.length)
-              setError(field as keyof SignUpFormData, { message: msgs[0] });
-          });
+      const json = await res.json().catch(() => null);
+
+      if (!res.ok || !json?.ok) {
+        const msg = json?.error?.message || "สมัครสมาชิกไม่สำเร็จ";
+        if (/Username already registered/i.test(msg)) {
+          setError("username", { message: "ชื่อผู้ใช้นี้ถูกใช้แล้ว" });
+        } else if (/Email already registered/i.test(msg)) {
+          setError("email", { message: "อีเมลนี้ถูกใช้แล้ว" });
         }
-        const msg = result.formError || "สมัครสมาชิกไม่สำเร็จ";
         toast.error("สมัครสมาชิกไม่สำเร็จ", { description: msg });
         return;
       }
 
-      toast.success("สมัครสมาชิกสำเร็จ", { description: "โปรดเข้าสู่ระบบ" });
-      router.replace("/sign-in");
-    } catch (err) {
-      toast.error("สมัครสมาชิกไม่สำเร็จ");
+      toast.success("สมัครสมาชิกสำเร็จ", {
+        description: "โปรดเข้าสู่ระบบเพื่อเริ่มใช้งาน",
+      });
+      router.replace(next);
+    } catch (err: any) {
+      toast.error("สมัครสมาชิกไม่สำเร็จ", {
+        description: err?.message ?? "เกิดข้อผิดพลาด",
+      });
     } finally {
       setSubmitting(false);
     }
@@ -124,7 +160,7 @@ export default function SignUpClient() {
               <Label htmlFor="username">ชื่อผู้ใช้</Label>
               <Input
                 id="username"
-                placeholder="เช่น user"
+                placeholder="เช่น user123"
                 autoComplete="username"
                 {...register("username")}
                 aria-invalid={!!errors.username}
@@ -193,12 +229,8 @@ export default function SignUpClient() {
                 </p>
               )}
 
-              {/* Checklist */}
               <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
-                <Hint
-                  ok={pwdChecks.lengthOk}
-                  text="ความยาวอย่างน้อย 8 ตัวอักษร"
-                />
+                <Hint ok={pwdChecks.lengthOk} text="อย่างน้อย 8 ตัวอักษร" />
                 <Hint ok={pwdChecks.upperOk} text="มีตัวอักษรพิมพ์ใหญ่ (A-Z)" />
                 <Hint ok={pwdChecks.lowerOk} text="มีตัวอักษรพิมพ์เล็ก (a-z)" />
                 <Hint ok={pwdChecks.numberOk} text="มีตัวเลข (0-9)" />
@@ -261,6 +293,7 @@ export default function SignUpClient() {
               <Link
                 href="/sign-in"
                 className="text-primary hover:text-primary-hover font-medium"
+                prefetch={false}
               >
                 เข้าสู่ระบบ
               </Link>

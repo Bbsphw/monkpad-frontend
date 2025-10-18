@@ -1,6 +1,8 @@
-// src/components/dashboard/nav-user.tsx
+// src/components/dashboard/new/nav-user.tsx
 "use client";
 
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
   CreditCard,
   EllipsisVertical,
@@ -36,6 +38,21 @@ export function NavUser({
   };
 }) {
   const { isMobile } = useSidebar();
+  const router = useRouter();
+
+  const onLogout = async () => {
+    try {
+      const res = await fetch("/api/auth/logout", { method: "POST" });
+      if (!res.ok) throw new Error("Logout failed");
+      toast.success("ออกจากระบบแล้ว");
+      router.replace("/sign-in");
+    } catch {
+      toast.error("ออกจากระบบไม่สำเร็จ");
+    }
+  };
+
+  const fallback =
+    user.name?.trim()?.charAt(0)?.toUpperCase() || user.email?.charAt(0) || "U";
 
   return (
     <SidebarMenu>
@@ -48,7 +65,9 @@ export function NavUser({
             >
               <Avatar className="h-8 w-8 rounded-lg grayscale">
                 <AvatarImage src={user.avatar} alt={user.name} />
-                <AvatarFallback className="rounded-lg">CN</AvatarFallback>
+                <AvatarFallback className="rounded-lg">
+                  {fallback}
+                </AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">{user.name}</span>
@@ -69,7 +88,9 @@ export function NavUser({
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <Avatar className="h-8 w-8 rounded-lg">
                   <AvatarImage src={user.avatar} alt={user.name} />
-                  <AvatarFallback className="rounded-lg">CN</AvatarFallback>
+                  <AvatarFallback className="rounded-lg">
+                    {fallback}
+                  </AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">{user.name}</span>
@@ -95,7 +116,7 @@ export function NavUser({
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={onLogout}>
               <LogOut />
               Log out
             </DropdownMenuItem>
