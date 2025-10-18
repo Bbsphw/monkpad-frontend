@@ -36,12 +36,12 @@ const navMain: NavItem[] = [
     icon: BadgeDollarSign,
   },
   { kind: "link", title: "Reports", url: "/reports", icon: ChartBar },
-  {
-    kind: "action",
-    title: "Upload Slip",
-    action: "upload-slip",
-    icon: ImageUp,
-  },
+  // {
+  //   kind: "action",
+  //   title: "Upload Slip",
+  //   action: "upload-slip",
+  //   icon: ImageUp,
+  // },
 ];
 
 export type AppSidebarUser = {
