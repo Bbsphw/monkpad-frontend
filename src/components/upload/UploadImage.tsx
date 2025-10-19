@@ -1,10 +1,10 @@
-// components/upload/UploadImage.tsx
+// src/components/upload/UploadImage.tsx
 "use client";
 
 import * as React from "react";
 import Image from "next/image";
 import { z } from "zod";
-import { useForm, Controller } from "react-hook-form";
+import { useForm, Controller, type SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,14 +24,25 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon, UploadCloud, X, Plus } from "lucide-react";
+import { CalendarIcon, UploadCloud, X, Plus, Scan, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { th } from "date-fns/locale/th";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
+// -------------------- Config --------------------
 const MAX_FILE_SIZE_MB = 10;
 const ACCEPTED_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
+type Tag = {
+  id: number;
+  tag: string;
+  type: "income" | "expense";
+  value: number;
+};
+const DEFAULT_TAGS = new Set(["รายรับอื่นๆ", "รายจ่ายอื่นๆ"]);
+
+// -------------------- Zod Schema --------------------
 const formSchema = z.object({
   slip: z
     .instanceof(File, { message: "โปรดอัปโหลดรูปสลิป" })
@@ -40,46 +51,53 @@ const formSchema = z.object({
     })
     .refine((file) => file.size <= MAX_FILE_SIZE_MB * 1024 * 1024, {
       message: `ขนาดไฟล์ต้องไม่เกิน ${MAX_FILE_SIZE_MB}MB`,
-    }),
-  type: z.enum(["income", "expense"], {
-    required_error: "กรุณาเลือกประเภท",
-  }),
-  amount: z
-    .string()
-    .min(1, "กรุณากรอกจำนวนเงิน")
-    .refine(
-      (val) =>
-        !isNaN(Number(val.replace(/,/g, ""))) &&
-        Number(val.replace(/,/g, "")) > 0,
-      "จำนวนเงินต้องมากกว่า 0"
-    ),
-  category: z.string().min(1, "กรุณาเลือกหรือสร้างหมวดหมู่"),
-  description: z
-    .string()
-    .max(500, "รายละเอียดต้องไม่เกิน 500 ตัวอักษร")
+    })
     .optional(),
-  date: z.date({ required_error: "กรุณาเลือกวันที่" }),
+
+  type: z.enum(["income", "expense"]),
+
+  amount: z
+    .union([z.string(), z.number()])
+    .transform((v) => (typeof v === "string" ? Number(v.replace(/,/g, "")) : v))
+    .refine((n) => Number.isFinite(n), { message: "จำนวนเงินไม่ถูกต้อง" })
+    .refine((n) => n > 0, { message: "จำนวนเงินต้องมากกว่า 0" }),
+
+  tag_id: z.coerce
+    .number()
+    .refine(Number.isFinite, { message: "กรุณาเลือกหมวดหมู่" })
+    .int({ message: "กรุณาเลือกหมวดหมู่" })
+    .positive({ message: "กรุณาเลือกหมวดหมู่" }),
+
+  note: z.string().max(500, "รายละเอียดต้องไม่เกิน 500 ตัวอักษร").optional(),
+
+  date: z.coerce.date().refine((d) => !isNaN(d.getTime()), {
+    message: "กรุณาเลือกวันที่",
+  }),
+
+  time: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/, "เวลาไม่ถูกต้อง (HH:MM)")
+    .refine((t) => {
+      const [hh, mm] = t.split(":").map(Number);
+      return hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59;
+    }, "เวลาไม่ถูกต้อง (ช่วง 00:00–23:59)"),
 });
 
-export type UploadImageValues = z.infer<typeof formSchema>;
+type UploadImageInput = z.input<typeof formSchema>;
+type UploadImageOutput = z.output<typeof formSchema>;
 
 interface UploadImageProps {
-  onSuccess?: (payload: {
-    slip: File;
-    type: "income" | "expense";
-    amount: number;
-    category: string;
-    description?: string;
-    date: Date;
-  }) => void;
+  onSuccess?: () => void;
 }
 
 export default function UploadImage({ onSuccess }: UploadImageProps) {
   const [preview, setPreview] = React.useState<string | null>(null);
   const [isDragActive, setIsDragActive] = React.useState(false);
-  const [customCategories, setCustomCategories] = React.useState<string[]>([]);
+  const [tags, setTags] = React.useState<Tag[]>([]);
   const [isAddingCategory, setIsAddingCategory] = React.useState(false);
   const [newCategoryName, setNewCategoryName] = React.useState("");
+  const [ocrLoading, setOcrLoading] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const {
@@ -88,50 +106,56 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
     setValue,
     watch,
     reset,
+    setError,
     formState: { errors, isSubmitting, isValid },
-  } = useForm<UploadImageValues>({
+  } = useForm<UploadImageInput>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       type: "expense",
       amount: "",
-      category: "",
-      description: "",
+      tag_id: "",
+      note: "",
       date: new Date(),
+      time: "12:00",
     },
     mode: "onChange",
   });
 
-  // Load categories
-  React.useEffect(() => {
-    const savedCategories = localStorage.getItem("user-categories");
-    if (savedCategories) {
-      try {
-        setCustomCategories(JSON.parse(savedCategories));
-      } catch (error) {
-        console.error("Failed to load categories:", error);
-      }
+  const type = watch("type");
+  const selectedTagId = watch("tag_id");
+  const amount = watch("amount");
+
+  // -------------------- Load Tags --------------------
+  const loadTags = React.useCallback(async () => {
+    try {
+      const res = await fetch("/api/tags/me", { cache: "no-store" });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) throw new Error(json?.error?.message);
+      setTags(json.data as Tag[]);
+    } catch {
+      setTags([]);
     }
   }, []);
-
-  // Persist categories
   React.useEffect(() => {
-    localStorage.setItem("user-categories", JSON.stringify(customCategories));
-  }, [customCategories]);
+    loadTags();
+  }, [loadTags]);
 
-  // Cleanup object URL
+  const typeTags = React.useMemo(
+    () => tags.filter((t) => t.type === type),
+    [tags, type]
+  );
   React.useEffect(() => {
-    return () => {
-      if (preview) URL.revokeObjectURL(preview);
-    };
-  }, [preview]);
+    setValue("tag_id", "", { shouldValidate: true });
+  }, [type, setValue]);
 
+  // -------------------- File / OCR --------------------
   const handleFileSelect = React.useCallback(
     (file: File | null) => {
       if (!file) {
         setPreview(null);
         return;
       }
-      setValue("slip", file, { shouldValidate: true });
+      setValue("slip", file as any, { shouldValidate: true });
       const url = URL.createObjectURL(file);
       setPreview((prev) => {
         if (prev) URL.revokeObjectURL(prev);
@@ -159,56 +183,147 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
     else if (e.type === "dragleave") setIsDragActive(false);
   }, []);
 
-  const handleAddCategory = () => {
+  const runOCR = async () => {
+    const file = watch("slip") as File | undefined;
+    if (!file) {
+      setError("slip", { message: "โปรดอัปโหลดรูปก่อนอ่าน OCR" });
+      return;
+    }
+
+    setOcrLoading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/ocr/parse", { method: "POST", body: fd });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok)
+        throw new Error(json?.error?.message || "OCR ไม่สำเร็จ");
+
+      const { amount, date, time } = json.data ?? {};
+      if (amount !== undefined)
+        setValue("amount", String(amount), { shouldValidate: true });
+      if (date)
+        setValue("date", new Date(date) as any, { shouldValidate: true });
+      if (time) setValue("time", time as any, { shouldValidate: true });
+
+      toast.success("อ่านข้อมูลจากสลิปสำเร็จ");
+    } catch (err: any) {
+      toast.error("อ่านสลิปไม่สำเร็จ", { description: err?.message });
+    } finally {
+      setOcrLoading(false);
+    }
+  };
+
+  // -------------------- Add / Delete Category --------------------
+  const addCategory = async () => {
     const name = newCategoryName.trim();
-    if (name && !customCategories.includes(name)) {
-      const updated = [...customCategories, name];
-      setCustomCategories(updated);
-      setValue("category", name, { shouldValidate: true });
+    if (!name) return;
+
+    try {
+      const res = await fetch("/api/tags/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tag: name, type }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) throw new Error(json?.error?.message);
+      toast.success("เพิ่มหมวดหมู่สำเร็จ");
       setNewCategoryName("");
       setIsAddingCategory(false);
+
+      await loadTags();
+
+      const created =
+        (json?.data as Tag | undefined) ??
+        (await (async () => {
+          const latest = await fetch("/api/tags/me", { cache: "no-store" })
+            .then((r) => r.json())
+            .catch(() => null);
+          const arr = (latest?.data as Tag[]) || [];
+          return arr.find((t) => t.tag === name && t.type === type);
+        })());
+
+      if (created)
+        setValue("tag_id", String(created.id) as any, { shouldValidate: true });
+    } catch (err: any) {
+      toast.error("เพิ่มหมวดหมู่ไม่สำเร็จ", { description: err?.message });
     }
   };
 
-  const onSubmit = async (values: UploadImageValues) => {
+  const deleteCategory = async () => {
+    const selectedIdNum = Number(selectedTagId || 0);
+    const tag = tags.find((t) => t.id === selectedIdNum);
+    if (!tag) return;
+
+    if (DEFAULT_TAGS.has(tag.tag)) {
+      toast.error("ไม่สามารถลบหมวดหมู่เริ่มต้นได้");
+      return;
+    }
+
+    const ok = window.confirm(
+      `ต้องการลบหมวดหมู่ “${tag.tag}” หรือไม่?\nธุรกรรมทั้งหมดจะถูกย้ายไปหมวดเริ่มต้นของประเภทเดียวกัน`
+    );
+    if (!ok) return;
+
+    setDeleting(true);
     try {
-      const amountNumber = Number(values.amount.replace(/,/g, ""));
+      const res = await fetch(`/api/tags/delete/${tag.id}`, {
+        method: "DELETE",
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok)
+        throw new Error(json?.error?.message || "ลบหมวดหมู่ไม่สำเร็จ");
+
+      toast.success("ลบหมวดหมู่สำเร็จ");
+      await loadTags();
+      setValue("tag_id", "" as any, { shouldValidate: true });
+    } catch (err: any) {
+      toast.error("ลบหมวดหมู่ไม่สำเร็จ", { description: err?.message });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // -------------------- Submit --------------------
+  const onSubmit: SubmitHandler<UploadImageInput> = async (raw) => {
+    const values = formSchema.parse(raw) as UploadImageOutput;
+
+    try {
       const payload = {
-        slip: values.slip,
-        type: values.type,
-        amount: amountNumber,
-        category: values.category,
-        description: values.description,
-        date: values.date,
+        tag_id: values.tag_id,
+        value: values.amount,
+        date: format(values.date, "yyyy-MM-dd"),
+        time: values.time,
+        note: values.note ?? "",
       };
 
-      // add new category if needed
-      if (!customCategories.includes(values.category)) {
-        setCustomCategories((prev) => [...prev, values.category]);
-      }
+      const res = await fetch("/api/transactions/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok)
+        throw new Error(json?.error?.message || "บันทึกรายการไม่สำเร็จ");
 
-      // simulate API
-      await new Promise((r) => setTimeout(r, 1000));
+      toast.success("บันทึกรายการสำเร็จ");
+      onSuccess?.();
 
-      onSuccess?.(payload);
-
-      // reset (keep categories)
       reset({
-        type: "expense",
+        type: values.type,
         amount: "",
-        category: "",
-        description: "",
+        tag_id: "",
+        note: "",
         date: new Date(),
+        time: "12:00",
       });
       setPreview(null);
-    } catch (err) {
-      console.error("Upload failed:", err);
+    } catch (err: any) {
+      toast.error("อัปโหลดไม่สำเร็จ", { description: err?.message });
     }
   };
 
-  const amount = watch("amount");
-  const selectedCategory = watch("category");
-
+  // -------------------- UI --------------------
   return (
     <Card className="w-full border-0 shadow-none">
       <CardContent className="p-0">
@@ -217,9 +332,31 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
           className="space-y-6"
           noValidate
         >
-          {/* Dropzone */}
+          {/* Slip + OCR */}
           <div className="space-y-2">
-            <Label htmlFor="slip">สลิป *</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="slip">สลิป (ไม่บังคับ)</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={runOCR}
+                disabled={ocrLoading || !preview}
+              >
+                {ocrLoading ? (
+                  <>
+                    <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    กำลังอ่าน...
+                  </>
+                ) : (
+                  <>
+                    <Scan className="mr-2 h-4 w-4" />
+                    อ่านจากสลิป (OCR)
+                  </>
+                )}
+              </Button>
+            </div>
+
             <div
               className={cn(
                 "relative cursor-pointer rounded-lg border-2 border-dashed p-6 text-center transition-colors",
@@ -261,20 +398,13 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
               ) : (
                 <div className="flex flex-col items-center gap-3">
                   <UploadCloud className="h-10 w-10 text-muted-foreground" />
-                  <div>
-                    <p className="text-sm font-medium">
-                      ลากและวางหรือคลิกเพื่ออัปโหลด
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      PNG, JPG, WebP • สูงสุด {MAX_FILE_SIZE_MB}MB
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
+                  <p className="text-sm font-medium">
+                    ลากและวางหรือคลิกเพื่ออัปโหลด
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    PNG, JPG, WebP • สูงสุด {MAX_FILE_SIZE_MB}MB
+                  </p>
+                  <Button type="button" variant="outline" size="sm">
                     เลือกไฟล์
                   </Button>
                 </div>
@@ -289,20 +419,22 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
               />
             </div>
             {errors.slip && (
-              <p className="text-sm text-destructive">{errors.slip.message}</p>
+              <p className="text-sm text-destructive">
+                {errors.slip.message as string}
+              </p>
             )}
           </div>
 
+          {/* Type & Amount */}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {/* Type */}
-            <div className="space-y-2">
-              <Label htmlFor="type">ประเภท *</Label>
+            <div>
+              <Label>ประเภท *</Label>
               <Controller
                 control={control}
                 name="type"
                 render={({ field }) => (
                   <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger id="type" className="w-full">
+                    <SelectTrigger>
                       <SelectValue placeholder="เลือกประเภท" />
                     </SelectTrigger>
                     <SelectContent>
@@ -314,58 +446,68 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
               />
               {errors.type && (
                 <p className="text-sm text-destructive">
-                  {errors.type.message}
+                  {errors.type.message as string}
                 </p>
               )}
             </div>
 
-            {/* Amount */}
-            <div className="space-y-2">
-              <Label htmlFor="amount">จำนวนเงิน (THB) *</Label>
+            <div>
+              <Label>จำนวนเงิน (THB) *</Label>
               <Controller
                 control={control}
                 name="amount"
                 render={({ field }) => (
-                  <Input
-                    {...field}
-                    id="amount"
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="0.00"
-                    className="w-full"
-                  />
+                  <Input {...field} inputMode="decimal" placeholder="0.00" />
                 )}
               />
               {errors.amount && (
                 <p className="text-sm text-destructive">
-                  {errors.amount.message}
+                  {errors.amount.message as string}
                 </p>
               )}
-              {amount && (
+              {amount !== "" && amount !== undefined && (
                 <p className="text-xs text-muted-foreground">
                   {new Intl.NumberFormat("th-TH", {
                     style: "currency",
                     currency: "THB",
-                  }).format(Number(amount.replace(/,/g, "")) || 0)}
+                  }).format(
+                    Number(
+                      typeof amount === "string"
+                        ? amount.replace(/,/g, "")
+                        : amount
+                    )
+                  )}
                 </p>
               )}
             </div>
           </div>
 
           {/* Category */}
-          <div className="space-y-3">
+          <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label htmlFor="category">หมวดหมู่ *</Label>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsAddingCategory(true)}
-                className="h-8 px-2 text-xs"
-              >
-                <Plus className="mr-1 h-3 w-3" />
-                สร้างหมวดหมู่ใหม่
-              </Button>
+              <Label>หมวดหมู่ *</Label>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsAddingCategory(true)}
+                >
+                  <Plus className="mr-1 h-3 w-3" /> เพิ่มหมวดหมู่
+                </Button>
+                {selectedTagId ? (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    onClick={deleteCategory}
+                    disabled={deleting}
+                  >
+                    <Trash2 className="mr-1 h-3 w-3" />
+                    {deleting ? "กำลังลบ..." : "ลบหมวดหมู่"}
+                  </Button>
+                ) : null}
+              </div>
             </div>
 
             {isAddingCategory ? (
@@ -374,31 +516,19 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
                   value={newCategoryName}
                   onChange={(e) => setNewCategoryName(e.target.value)}
                   placeholder="ชื่อหมวดหมู่ใหม่"
-                  className="flex-1"
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleAddCategory();
-                    }
-                  }}
                 />
                 <Button
-                  type="button"
-                  onClick={handleAddCategory}
+                  onClick={addCategory}
                   disabled={!newCategoryName.trim()}
-                  size="sm"
                 >
                   เพิ่ม
                 </Button>
                 <Button
-                  type="button"
                   variant="outline"
                   onClick={() => {
                     setIsAddingCategory(false);
                     setNewCategoryName("");
                   }}
-                  size="sm"
                 >
                   ยกเลิก
                 </Button>
@@ -406,28 +536,30 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
             ) : (
               <Controller
                 control={control}
-                name="category"
+                name="tag_id"
                 render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger id="category">
+                  <Select
+                    value={field.value ? String(field.value) : ""}
+                    onValueChange={(val) => field.onChange(val)}
+                  >
+                    <SelectTrigger>
                       <SelectValue
                         placeholder={
-                          customCategories.length === 0
-                            ? "สร้างหมวดหมู่แรกของคุณ"
+                          typeTags.length === 0
+                            ? "ยังไม่มีหมวดหมู่ — เพิ่มหมวดหมู่ก่อน"
                             : "เลือกหมวดหมู่"
                         }
                       />
                     </SelectTrigger>
                     <SelectContent>
-                      {customCategories.length === 0 ? (
-                        // ❌ ห้ามสร้าง SelectItem ที่ value=""
+                      {typeTags.length === 0 ? (
                         <div className="p-2 text-sm text-muted-foreground">
-                          ยังไม่มีหมวดหมู่ — สร้างหมวดหมู่ใหม่ก่อน
+                          ยังไม่มีหมวดหมู่ของประเภทนี้
                         </div>
                       ) : (
-                        customCategories.map((category) => (
-                          <SelectItem key={category} value={category}>
-                            {category}
+                        typeTags.map((t) => (
+                          <SelectItem key={t.id} value={String(t.id)}>
+                            {t.tag}
                           </SelectItem>
                         ))
                       )}
@@ -436,80 +568,103 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
                 )}
               />
             )}
-            {errors.category && (
+            {errors.tag_id && (
               <p className="text-sm text-destructive">
-                {errors.category.message}
-              </p>
-            )}
-            {customCategories.length > 0 && selectedCategory && (
-              <p className="text-xs text-muted-foreground">
-                เลือก: <span className="font-medium">{selectedCategory}</span>
+                {errors.tag_id.message as string}
               </p>
             )}
           </div>
 
-          {/* Description */}
+          {/* Note */}
           <div className="space-y-2">
-            <Label htmlFor="description">รายละเอียด</Label>
+            <Label htmlFor="note">รายละเอียด</Label>
             <Controller
               control={control}
-              name="description"
+              name="note"
               render={({ field }) => (
                 <Textarea
                   {...field}
-                  id="description"
+                  id="note"
                   placeholder="ระบุรายละเอียดเพิ่มเติม..."
                   rows={3}
                   className="resize-none"
                 />
               )}
             />
-            {errors.description && (
+            {errors.note && (
               <p className="text-sm text-destructive">
-                {errors.description.message}
+                {errors.note.message as string}
               </p>
             )}
           </div>
 
-          {/* Date */}
-          <div className="space-y-2">
-            <Label>วันที่ *</Label>
-            <Controller
-              control={control}
-              name="date"
-              render={({ field }) => (
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !field.value && "text-muted-foreground"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {field.value ? (
-                        format(field.value, "dd MMMM yyyy", { locale: th })
-                      ) : (
-                        <span>เลือกวันที่</span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={field.value}
-                      onSelect={field.onChange}
-                      initialFocus
-                      locale={th}
-                    />
-                  </PopoverContent>
-                </Popover>
+          {/* Date & Time */}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label>วันที่ *</Label>
+              <Controller
+                control={control}
+                name="date"
+                render={({ field }) => (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !field.value && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {field.value ? (
+                          format(field.value as any as Date, "dd MMMM yyyy", {
+                            locale: th,
+                          })
+                        ) : (
+                          <span>เลือกวันที่</span>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={field.value as any as Date}
+                        onSelect={(d) => field.onChange(d as any)}
+                        initialFocus
+                        locale={th}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                )}
+              />
+              {errors.date && (
+                <p className="text-sm text-destructive">
+                  {errors.date.message as string}
+                </p>
               )}
-            />
-            {errors.date && (
-              <p className="text-sm text-destructive">{errors.date.message}</p>
-            )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="time">เวลา (HH:MM) *</Label>
+              <Controller
+                control={control}
+                name="time"
+                render={({ field }) => (
+                  <Input
+                    {...field}
+                    id="time"
+                    type="time"
+                    step={60}
+                    placeholder="12:00"
+                  />
+                )}
+              />
+              {errors.time && (
+                <p className="text-sm text-destructive">
+                  {errors.time.message as string}
+                </p>
+              )}
+            </div>
           </div>
 
           {/* Actions */}
@@ -526,7 +681,7 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
                   กำลังบันทึก...
                 </>
               ) : (
-                "บันทึกธุรกรรม"
+                "บันทึกรายการ"
               )}
             </Button>
             <Button
@@ -535,11 +690,12 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
               className="flex-1"
               onClick={() => {
                 reset({
-                  type: "expense",
+                  type,
                   amount: "",
-                  category: "",
-                  description: "",
+                  tag_id: "",
+                  note: "",
                   date: new Date(),
+                  time: "12:00",
                 });
                 setPreview(null);
               }}
