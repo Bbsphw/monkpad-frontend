@@ -1,4 +1,3 @@
-// src/lib/http.ts
 import { env } from "./env";
 import { cookies as nextCookies, headers as nextHeaders } from "next/headers";
 

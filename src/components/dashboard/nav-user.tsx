@@ -42,7 +42,7 @@ export function NavUser({
 
   const onLogout = async () => {
     try {
-      const res = await fetch("/api/auth/logout", { method: "POST" });
+      const res = await fetch("/api/auth/logout", { method: "GET" });
       if (!res.ok) throw new Error();
       toast.success("ออกจากระบบสำเร็จ");
       router.replace("/sign-in");

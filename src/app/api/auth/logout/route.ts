@@ -1,14 +1,10 @@
 // src/app/api/auth/logout/route.ts
-export async function POST() {
-  const res = Response.json({ ok: true });
-  res.headers.append(
-    "Set-Cookie",
-    [
-      "mp_token=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0",
-      "mp_token=; Path=/; HttpOnly; Secure; SameSite=Lax; Expires=Thu, 01 Jan 1970 00:00:00 GMT",
-    ].join(", ")
-  );
-  return res;
-}
+import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
 
-export const GET = POST;
+export async function GET() {
+  const cookie = await cookies();
+  console.log(cookie.getAll());
+  cookie.delete("mp_token");
+  return NextResponse.json({ message: "Cookie deleted" });
+}
