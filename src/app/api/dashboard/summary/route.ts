@@ -1,38 +1,45 @@
 // src/app/api/dashboard/summary/route.ts
+
+import { cookies } from "next/headers";
+import { env } from "@/lib/env";
+import { decodeJwt } from "@/lib/jwt";
 import { handleRouteError, jsonError } from "@/lib/errors";
 
-/** GET /api/dashboard/summary?year=2024&month=6
- *   - ดึง month_results ปีนั้น แล้วเลือกเดือนที่ต้องการ
- *   - คำนวณ balance = income - expense
- */
+/** GET /api/dashboard/summary?year=2025&month=6 */
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const year = Number(url.searchParams.get("year"));
     const month = Number(url.searchParams.get("month"));
+    if (!Number.isFinite(year)) return jsonError(422, "year is required");
+    if (!Number.isFinite(month) || month < 1 || month > 12)
+      return jsonError(422, "month is required (1-12)");
 
-    if (!Number.isFinite(year) || year < 1970) {
-      return jsonError(422, "year is required");
-    }
-    if (!Number.isFinite(month) || month < 1 || month > 12) {
-      return jsonError(422, "month is required (1–12)");
-    }
+    const cookieStore = await cookies();
+    const token = cookieStore.get("mp_token")?.value || "";
+    if (!token) return jsonError(401, "Not authenticated");
+    const { uid } = decodeJwt<{ uid?: number }>(token) || {};
+    if (!uid) return jsonError(401, "Not authenticated");
 
-    // ใช้ internal API: /api/month-results/year/[year]
-    const yrRes = await fetch(new URL(`/api/month-results/year/${year}`, url), {
-      cache: "no-store",
-    });
-    const yr = await yrRes.json().catch(() => null);
-    if (!yrRes.ok || !yr?.ok) {
-      return jsonError(
-        yrRes.status,
-        yr?.error?.message ?? "month-results failed"
-      );
-    }
+    // month_results ของ user (ดึงทั้งปี แล้วเลือกเดือน)
+    const upstream = await fetch(
+      `${env.API_BASE_URL}/month_results/${uid}/${year}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        cache: "no-store",
+      }
+    );
+    const js = await upstream.json().catch(() => null);
+    if (!upstream.ok)
+      return jsonError(upstream.status, js?.detail || "month-results failed");
 
-    const row =
-      (yr.data as any[]).find((r) => Number(r.month) === month) ?? null;
-
+    const row = (Array.isArray(js) ? js : []).find(
+      (r: any) => Number(r.month) === month
+    );
     const income = Number(row?.income ?? 0) || 0;
     const expense = Number(row?.expense ?? 0) || 0;
     const balance = income - expense;

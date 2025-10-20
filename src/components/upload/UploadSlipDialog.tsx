@@ -10,6 +10,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import UploadImage from "./UploadImage";
+// import { useRouter } from "next/navigation";
 
 interface UploadSlipDialogProps {
   open?: boolean;
@@ -25,13 +26,17 @@ export function UploadSlipDialog({
   children,
 }: UploadSlipDialogProps) {
   const [internalOpen, setInternalOpen] = React.useState(false);
+  // const router = useRouter();
+
   const isControlled = open !== undefined;
   const currentOpen = isControlled ? open : internalOpen;
   const setCurrentOpen = isControlled ? onOpenChange : setInternalOpen;
 
   const handleSuccess = React.useCallback(() => {
     setCurrentOpen?.(false);
+    // router.refresh();
     onSuccess?.();
+    // window.location.reload();
   }, [setCurrentOpen, onSuccess]);
 
   return (
