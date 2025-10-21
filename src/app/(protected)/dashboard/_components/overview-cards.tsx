@@ -356,7 +356,7 @@ export function OverviewCards({
     },
     {
       id: "balance",
-      title: "ยอดคงเหลือ",
+      title: "ยอดคงเหลือเดือนนี้",
       value: 0,
       valueType: "currency",
       icon: <Wallet className="h-5 w-5" />,
@@ -364,7 +364,7 @@ export function OverviewCards({
     },
     {
       id: "tx-count",
-      title: "จำนวนธุรกรรม",
+      title: "จำนวนธุรกรรมเดือนนี้",
       value: 0,
       valueType: "number",
       icon: <Receipt className="h-5 w-5" />,

@@ -1,9 +1,12 @@
 // src/app/(protected)/reports/_components/report-cards.tsx
+
+// src/app/(protected)/reports/_components/report-cards.tsx
 "use client";
 
 import * as React from "react";
 import { ArrowDownCircle, ArrowUpCircle, Receipt, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { Summary } from "../_types/reports";
 import {
   Carousel,
   CarouselContent,
@@ -11,13 +14,6 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from "@/components/ui/carousel";
-
-export type Summary = {
-  income: number;
-  expense: number;
-  balance: number;
-  transactions: number;
-};
 
 /* ---------- formatting ---------- */
 function formatTH(value: number, type: "currency" | "number") {
@@ -54,7 +50,7 @@ const META: Record<
     text: "text-emerald-900 dark:text-emerald-200",
     iconWrap:
       "bg-white/60 dark:bg-white/10 text-emerald-600 dark:text-emerald-300",
-    desc: "รวมรายรับตามช่วงที่เลือก",
+    desc: "รวมรายรับจากข้อมูลที่ดึงมา",
   },
   expense: {
     label: "รายจ่าย",
@@ -63,7 +59,7 @@ const META: Record<
     bg: "bg-rose-50 dark:bg-rose-950/20 border-rose-200/50 dark:border-rose-900",
     text: "text-rose-900 dark:text-rose-200",
     iconWrap: "bg-white/60 dark:bg-white/10 text-rose-600 dark:text-rose-300",
-    desc: "รวมรายจ่ายตามช่วงที่เลือก",
+    desc: "รวมรายจ่ายจากข้อมูลที่ดึงมา",
   },
   balance: {
     label: "ยอดคงเหลือ",
@@ -81,7 +77,7 @@ const META: Record<
     bg: "bg-sky-50 dark:bg-sky-950/20 border-sky-200/50 dark:border-sky-900",
     text: "text-sky-900 dark:text-sky-200",
     iconWrap: "bg-white/60 dark:bg-white/10 text-sky-600 dark:text-sky-300",
-    desc: "จำนวนรายการธุรกรรม",
+    desc: "จำนวนรายการทั้งหมดจาก payload",
   },
 };
 
@@ -109,7 +105,6 @@ function StatCard({ kind, value }: { kind: keyof Summary; value: number }) {
       </div>
 
       <div className="flex flex-col gap-1">
-        {/* ขนาดตัวเลขปรับตามพื้นที่ แต่ไม่ล้น */}
         <div
           className={cn("font-bold tabular-nums tracking-tight", meta.text)}
           style={{ fontSize: "clamp(1.6rem, 4.5vw, 2.2rem)" }}
@@ -122,7 +117,7 @@ function StatCard({ kind, value }: { kind: keyof Summary; value: number }) {
   );
 }
 
-/* ---------- main (1-card per view carousel) ---------- */
+/* ---------- main carousel (shadcn/ui) ---------- */
 export function ReportCards({
   summary,
   loading,
@@ -141,7 +136,7 @@ export function ReportCards({
   if (loading) {
     return (
       <div className="mx-auto w-full max-w-[440px]">
-        <div className="h-[140px] rounded-2xl border bg-muted/30 dark:bg-muted/10 animate-pulse" />
+        <div className="h-[180px] rounded-2xl border bg-muted/30 dark:bg-muted/10 animate-pulse" />
       </div>
     );
   }
@@ -170,11 +165,11 @@ export function ReportCards({
         className="w-full"
       >
         {/* spacing ซ้ายด้วย -ml-4 และ item ใช้ pl-4 → ขอบพอดีเวลาสแนป */}
-        <CarouselContent className="-ml-4 ">
+        <CarouselContent className="-ml-4">
           {order.map((k) => (
             <CarouselItem key={k} className="pl-4 basis-full">
               {/* fix ความสูงให้เท่ากันทุกสไลด์ */}
-              <div className="h-[450px] sm:h-[180px]">
+              <div className="h-[180px]">
                 <StatCard kind={k} value={summary[k]} />
               </div>
             </CarouselItem>
@@ -182,8 +177,14 @@ export function ReportCards({
         </CarouselContent>
 
         {/* ปุ่มเลื่อนวาง “นอกการ์ด” ไม่บังตัวเลข */}
-        <CarouselPrevious className="-left-4 translate-x-[-4px]" />
-        <CarouselNext className="-right-4 translate-x-[4px]" />
+        <CarouselPrevious
+          className="-left-4 translate-x-[-4px]"
+          aria-label="ก่อนหน้า"
+        />
+        <CarouselNext
+          className="-right-4 translate-x-[4px]"
+          aria-label="ถัดไป"
+        />
       </Carousel>
     </div>
   );

@@ -36,7 +36,7 @@ export function UploadSlipDialog({
     setCurrentOpen?.(false);
     // router.refresh();
     onSuccess?.();
-    // window.location.reload();
+    window.location.reload();
   }, [setCurrentOpen, onSuccess]);
 
   return (

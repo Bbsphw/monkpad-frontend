@@ -146,11 +146,11 @@ const toAreaSeries = (tp: TrafficPoint[], y: number): TrafficAreaPoint[] =>
       expense: p.expense,
     };
   });
-function buildRecent(txs: TxDTO[], limit = 10): RecentRow[] {
+function buildRecent(txs: TxDTO[]): RecentRow[] {
   const sorted = [...txs].sort((a, b) =>
     `${b.date} ${b.time ?? ""}`.localeCompare(`${a.date} ${a.time ?? ""}`)
   );
-  return sorted.slice(0, limit).map((t) => ({
+  return sorted.slice(0).map((t) => ({
     id: String(t.id),
     date: t.date,
     time: t.time,
@@ -185,10 +185,9 @@ function countMonthlyTx(txs: TxDTO[], y: number, m: number): number {
 export async function getDashboardAll(params: {
   year: number;
   month: number;
-  recentLimit?: number;
   categoryType?: "income" | "expense";
 }) {
-  const { year, month, recentLimit = 10, categoryType = "expense" } = params;
+  const { year, month, categoryType = "expense" } = params;
 
   const res = await fetchJSONClient<CategoriesAPIResponse>(
     "/api/dashboard/categories?" +
@@ -215,7 +214,7 @@ export async function getDashboardAll(params: {
     const summary = buildSummary(txs, year, month);
     const trafficMonthly = buildMonthlyTraffic(txs, year);
     const trafficArea = toAreaSeries(trafficMonthly, year);
-    const recent = buildRecent(txs, recentLimit);
+    const recent = buildRecent(txs);
     const categories = buildCategorySeries(txs, year, month, categoryType);
     const txCount = countMonthlyTx(txs, year, month); // ✅ เพิ่มบรรทัดนี้
 
