@@ -1,38 +1,21 @@
-// app/(protected)/transactions/_schemas/transaction-schema.ts
+// src/app/(protected)/transactions/_schemas/transaction-schema.ts
+
 import { z } from "zod";
 
-/**
- * สคีมา: ใช้ z.coerce.number() เพื่อให้ amount ออกมาเป็น number เสมอ
- * เรียง .max().optional() ให้ถูกต้อง
- */
 export const transactionSchema = z.object({
   id: z.string().optional(),
-  date: z.string().min(10, "โปรดเลือกวันที่"),
-  type: z.enum(["income", "expense", "transfer"]),
-  category: z.string().min(1, "โปรดเลือกหมวดหมู่"),
-
+  date: z.string().min(10, "โปรดเลือกวันที่ (YYYY-MM-DD)"),
+  time: z
+    .string()
+    .regex(/^\d{2}:\d{2}(:\d{2})?$/, "เวลาไม่ถูกต้อง (HH:mm หรือ HH:mm:ss)")
+    .optional(),
+  type: z.enum(["income", "expense"]),
+  category: z.string().min(1, "โปรดเลือกหมวด"),
   amount: z.coerce
     .number()
-    .refine((v) => !Number.isNaN(v), { message: "จำนวนเงินต้องเป็นตัวเลข" })
+    .refine((v) => Number.isFinite(v), { message: "จำนวนเงินต้องเป็นตัวเลข" })
     .gt(0, { message: "จำนวนเงินต้องมากกว่า 0" }),
-
-  note: z.string().max(300, "โน้ตยาวเกินไป").optional(),
-
-  status: z.enum(["draft", "posted", "void"]).default("posted"),
-  source: z.enum(["manual", "ocr"]).default("manual"),
+  note: z.string().max(300, "รายละเอียดต้องไม่เกิน 300 ตัวอักษร").optional(),
 });
 
-/**
- * ฟอร์มของเรา “ต้องการใช้จริง” เป็น number แล้ว (หลัง coerce)
- * นิยามเป็น type ตายตัว เพื่อให้ useForm<T> และ zodResolver<T> ตรงกัน 100%
- */
-export type TransactionFormValues = {
-  id?: string;
-  date: string;
-  type: "income" | "expense" | "transfer";
-  category: string;
-  amount: number;
-  note?: string;
-  status: "draft" | "posted" | "void";
-  source: "manual" | "ocr";
-};
+export type TransactionFormValues = z.infer<typeof transactionSchema>;

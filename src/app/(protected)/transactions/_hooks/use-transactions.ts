@@ -1,4 +1,5 @@
 // app/(protected)/transactions/_hooks/use-transactions.ts
+
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -10,7 +11,7 @@ import type { Transaction } from "../_types/transaction";
 
 export type UseTransactionsState = {
   q: string;
-  type: "all" | "income" | "expense" | "transfer";
+  type: "all" | "income" | "expense";
   category?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -22,7 +23,7 @@ const INITIAL: UseTransactionsState = {
   q: "",
   type: "all",
   page: 1,
-  pageSize: 10, // ล็อกหน้า/ละ 10
+  pageSize: 15,
 };
 
 export function useTransactions() {
@@ -30,10 +31,12 @@ export function useTransactions() {
   const [rows, setRows] = useState<Transaction[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   const load = useCallback(
     async (override?: Partial<ListParams>) => {
       setLoading(true);
+      setErr(null);
       try {
         const res = await TransactionService.list({ ...params, ...override });
         setRows(res.data);
@@ -41,6 +44,10 @@ export function useTransactions() {
         if (override?.page) {
           setParams((p) => ({ ...p, page: override.page! }));
         }
+      } catch (e: any) {
+        setErr(e?.message || "โหลดรายการไม่สำเร็จ");
+        setRows([]);
+        setTotal(0);
       } finally {
         setLoading(false);
       }
@@ -61,7 +68,6 @@ export function useTransactions() {
     load,
   ]);
 
-  // ✅ ไม่รีเซ็ตหน้าเมื่อ patch มี page มาแล้ว
   const setFilter = useCallback((patch: Partial<UseTransactionsState>) => {
     setParams((prev) => {
       const next = { ...prev, ...patch };
@@ -81,6 +87,7 @@ export function useTransactions() {
     rows,
     total,
     loading,
+    error: err,
     pagination,
     reload: () => load(),
   };
