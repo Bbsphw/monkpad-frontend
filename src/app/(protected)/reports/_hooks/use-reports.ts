@@ -1,49 +1,39 @@
+// src/app/(protected)/reports/_hooks/use-reports.ts
+
 "use client";
 
 import * as React from "react";
-import { getReport } from "../_services/report-service";
-import { mockReport } from "../_data/mock";
-import type { Summary } from "../_components/report-cards";
-import type { MonthlyPoint } from "../_components/column-bar-chart";
-import type { CategoryPoint } from "../_components/bar-trend-chart";
+import type { ReportData } from "../_types/reports";
+import { getReports } from "../_services/reports-service";
 
-export type ReportData = {
-  summary: Summary;
-  monthlySeries: MonthlyPoint[]; // สำหรับ ColumnBarChart (รายเดือน)
-  categorySeries: CategoryPoint[]; // ✅ สำหรับ BarTrendChart (วิเคราะห์หมวด)
-};
-
-type Params = {
-  mode: "MONTH" | "RANGE";
+export function useReports(params: {
   year: number;
   month: number;
-  rangeStart?: { year: number; month: number };
-  rangeEnd?: { year: number; month: number };
-  type: "all" | "income" | "expense";
-};
+  type: "income" | "expense" | "all";
+}) {
+  const { year, month, type } = params;
 
-export function useReports(params: Params) {
   const [data, setData] = React.useState<ReportData | null>(null);
-  const [isLoading, setLoading] = React.useState(true);
-  const [isError, setError] = React.useState(false);
+  const [loading, setLoading] = React.useState<boolean>(true);
+  const [error, setError] = React.useState<string | null>(null);
 
-  const fetcher = React.useCallback(async () => {
+  const reload = React.useCallback(async () => {
     try {
       setLoading(true);
-      setError(false);
-      const res = await getReport(params);
-      setData(res ?? mockReport(params));
-    } catch {
-      setData(mockReport(params));
-      setError(true);
+      setError(null);
+      const res = await getReports({ year, month, type });
+      setData(res);
+    } catch (e: any) {
+      setError(e?.message ?? "Load reports failed");
+      setData(null);
     } finally {
       setLoading(false);
     }
-  }, [params]);
+  }, [year, month, type]);
 
   React.useEffect(() => {
-    fetcher();
-  }, [fetcher]);
+    void reload();
+  }, [reload]);
 
-  return { data, isLoading, isError, refetch: fetcher };
+  return { data, loading, error, reload };
 }

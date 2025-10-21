@@ -1,4 +1,4 @@
-// src/lib/http.ts
+// src/lib/http-client.ts
 
 import { env } from "./env";
 

@@ -96,11 +96,44 @@
 // src/app/(protected)/dashboard/_components/dashboard-client.tsx
 "use client";
 
+import * as React from "react";
+import dynamic from "next/dynamic";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useDashboard } from "../_hooks/use-dashboard";
-import { CategoryDonutChart } from "./category-donut-chart";
-import { OverviewCards } from "./overview-cards";
-import { RecentTransactionsTable } from "./recent-transactions-table";
-import { TrafficAreaChart } from "./traffic-area-chart";
+import { DashboardSkeleton } from "./dashboard-skeleton";
+
+// ✅ lazy-load แต่ละ component พร้อม skeleton ของมัน
+const OverviewCards = dynamic(
+  () => import("./overview-cards").then((m) => m.OverviewCards),
+  {
+    loading: () => <Skeleton className="h-[100px] w-full rounded-xl" />,
+    ssr: false,
+  }
+);
+const CategoryDonutChart = dynamic(
+  () => import("./category-donut-chart").then((m) => m.CategoryDonutChart),
+  {
+    loading: () => <Skeleton className="h-[320px] w-full rounded-xl" />,
+    ssr: false,
+  }
+);
+const TrafficAreaChart = dynamic(
+  () => import("./traffic-area-chart").then((m) => m.TrafficAreaChart),
+  {
+    loading: () => <Skeleton className="h-[320px] w-full rounded-xl" />,
+    ssr: false,
+  }
+);
+const RecentTransactionsTable = dynamic(
+  () =>
+    import("./recent-transactions-table").then(
+      (m) => m.RecentTransactionsTable
+    ),
+  {
+    loading: () => <Skeleton className="h-[400px] w-full rounded-xl" />,
+    ssr: false,
+  }
+);
 
 export default function DashboardClient() {
   const {
@@ -114,6 +147,8 @@ export default function DashboardClient() {
     year,
     month,
   } = useDashboard();
+
+  if (loading) return <DashboardSkeleton />;
 
   const overviewItems = summary && [
     {
@@ -132,21 +167,20 @@ export default function DashboardClient() {
     },
     {
       id: "balance",
-      title: "ยอดคงเหลือ",
+      title: "ยอดคงเหลือเดือนนี้",
       value: summary.balance,
       valueType: "currency" as const,
       accent: "primary" as const,
     },
     {
       id: "txCount",
-      title: "จำนวนธุรกรรม",
+      title: "จำนวนธุรกรรมเดือนนี้",
       value: txCount,
       valueType: "number" as const,
       accent: "info" as const,
     },
   ];
 
-  // recent → table rows (normalize เผื่อ amount/value/tag)
   const recentRows = (recent ?? []).map((r) => ({
     id: String(r.id),
     date: r.date,
@@ -157,9 +191,19 @@ export default function DashboardClient() {
   }));
 
   return (
-    <div className="grid gap-6">
+    <div className="p-4 md:p-6 space-y-6">
+      {/* Header */}
+      <header className="space-y-4">
+        <h1 className="text-xl md:text-2xl font-semibold">แดชบอร์ดภาพรวม</h1>
+        <p className="text-sm text-muted-foreground">
+          สรุปรายรับ–รายจ่าย และรายการล่าสุดของคุณ
+        </p>
+      </header>
+
+      {/* Overview */}
       <OverviewCards items={overviewItems ?? undefined} isLoading={loading} />
 
+      {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
           <TrafficAreaChart
@@ -177,11 +221,12 @@ export default function DashboardClient() {
         />
       </div>
 
+      {/* Table */}
       <RecentTransactionsTable rows={recentRows} isLoading={loading} />
 
       {error && (
         <div className="text-sm text-destructive">
-          ไม่สามารถโหลดข้อมูลแดชบอร์ด: {error}
+          ไม่สามารถโหลดข้อมูลแดชบอร์ด: {String(error)}
         </div>
       )}
     </div>

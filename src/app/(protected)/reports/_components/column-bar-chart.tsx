@@ -1,3 +1,5 @@
+// src/app/(protected)/reports/_components/column-bar-chart.tsx
+
 "use client";
 
 import * as React from "react";
@@ -24,14 +26,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import type { MonthlyPoint } from "../_types/reports";
 
 /* ----------------------------- types ----------------------------- */
-export type MonthlyPoint = {
-  month: string; // เช่น "01/67", "Jan 2024", "2024-01"
-  income: number;
-  expense: number;
-};
-
 type View = "both" | "income" | "expense";
 type Range = "12m" | "6m" | "3m";
 
@@ -61,26 +58,22 @@ function formatShort(n: number) {
 
 const rangeToMonths = (r: Range) => (r === "12m" ? 12 : r === "6m" ? 6 : 3);
 
-/** แปลง label เดิมให้เป็นชื่อเดือนภาษาไทยแบบย่อ */
 function parseThaiMonthLabel(raw: string): string {
   if (!raw) return "-";
   const clean = raw.trim();
 
-  // กรณีรูปแบบ 01/67 หรือ 1/67
   const matchDMY = clean.match(/^(\d{1,2})[\/\-](\d{2,4})$/);
   if (matchDMY) {
     const m = parseInt(matchDMY[1], 10);
     return TH_MONTH_SHORT[m - 1] ?? clean;
   }
 
-  // กรณี YYYY-MM
   const matchISO = clean.match(/^(\d{4})[\/\-](\d{1,2})$/);
   if (matchISO) {
     const m = parseInt(matchISO[2], 10);
     return TH_MONTH_SHORT[m - 1] ?? clean;
   }
 
-  // กรณีชื่อเดือนอังกฤษ เช่น Jan / February
   const engToTh: Record<string, string> = {
     jan: "ม.ค.",
     feb: "ก.พ.",
@@ -164,7 +157,6 @@ export function ColumnBarChart({
 
   return (
     <div className="flex w-full flex-col" style={{ height }}>
-      {/* Controls */}
       <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           <Select value={range} onValueChange={(v: Range) => setRange(v)}>
@@ -214,7 +206,6 @@ export function ColumnBarChart({
         </ToggleGroup>
       </div>
 
-      {/* Chart */}
       <div className="grow">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} barGap={6} barCategoryGap={10}>
@@ -246,7 +237,6 @@ export function ColumnBarChart({
             </defs>
 
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            {/* XAxis = เดือน (ภาษาไทย) */}
             <XAxis
               dataKey="month"
               tickMargin={8}
@@ -254,7 +244,6 @@ export function ColumnBarChart({
               tickLine={false}
               minTickGap={14}
             />
-            {/* YAxis = จำนวนเงิน */}
             <YAxis
               tickMargin={6}
               axisLine={false}

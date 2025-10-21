@@ -101,9 +101,9 @@ import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 
 import { getProfile } from "@/lib/auth-client";
-import { AppSidebar } from "@/components/dashboard/app-sidebar";
+import { AppSidebar } from "@/components/navbar/app-sidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { SiteHeaderDashboard } from "@/components/dashboard/site-header";
+import { SiteHeaderDashboard } from "@/components/navbar/site-header";
 
 function avatarFrom(username: string) {
   const seed = encodeURIComponent(username || "user");

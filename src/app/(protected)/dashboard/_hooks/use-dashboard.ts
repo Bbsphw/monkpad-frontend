@@ -121,7 +121,6 @@ export function useDashboard() {
       const res = await getDashboardAll({
         year,
         month,
-        recentLimit: 10,
         categoryType: "expense",
       });
       setSummary(res.summary);
