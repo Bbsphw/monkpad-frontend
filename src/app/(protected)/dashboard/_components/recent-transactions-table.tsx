@@ -776,9 +776,7 @@ export function RecentTransactionsTable({
                 <TableHead className="w-[120px]">วันที่</TableHead>
                 <TableHead>ประเภท</TableHead>
                 <TableHead>หมวดหมู่</TableHead>
-                <TableHead className="hidden sm:table-cell">
-                  รายละเอียด
-                </TableHead>
+                <TableHead className="hidden sm:table-cell">โน้ต</TableHead>
                 <TableHead className="text-right w-[140px]">
                   จำนวนเงิน
                 </TableHead>

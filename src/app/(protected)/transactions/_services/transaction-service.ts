@@ -1,20 +1,12 @@
-// app/(protected)/transactions/_services/transaction-service.ts
+// src/app/(protected)/transactions/_services/transaction-service.ts
+
 "use client";
 
-import { MOCK_TXNS } from "../_data/mock";
 import type { Transaction } from "../_types/transaction";
-import { nanoid } from "nanoid";
-import {
-  transactionSchema,
-  TransactionFormValues,
-} from "../_schemas/transaction-schema";
-
-// NOTE: ตรงนี้เป็น mock service; ต่อ API จริงให้แทนที่ fetch/* ด้วย lib/api-client
-let memory = [...MOCK_TXNS];
 
 export type ListParams = {
   q?: string;
-  type?: "all" | "income" | "expense" | "transfer";
+  type?: "all" | "income" | "expense";
   category?: string;
   dateFrom?: string; // YYYY-MM-DD
   dateTo?: string; // YYYY-MM-DD
@@ -29,6 +21,42 @@ export type ListResult = {
   pageSize: number;
 };
 
+function normalizeRow(r: any): Transaction | null {
+  if (!r) return null;
+  const id = String(r.id ?? "");
+  const date = String(r.date ?? "").slice(0, 10);
+  const type = (
+    r.type === "income" ? "income" : r.type === "expense" ? "expense" : null
+  ) as "income" | "expense" | null;
+  if (!id || !date || !type) return null;
+  return {
+    id,
+    date,
+    time: r.time ? String(r.time) : undefined,
+    type,
+    category: String(r.tag ?? r.category ?? "อื่นๆ"),
+    amount: Number(r.value ?? r.amount ?? 0) || 0,
+    note: r.note ? String(r.note) : undefined,
+  };
+}
+
+async function fetchAll(): Promise<Transaction[]> {
+  const res = await fetch("/api/transactions/me", { cache: "no-store" });
+  const js = await res.json().catch(() => null);
+  if (!res.ok || !js?.ok) {
+    throw new Error(js?.error?.message || "Fetch transactions failed");
+  }
+  const raw = Array.isArray(js.data) ? js.data : [];
+  const mapped = raw.map(normalizeRow).filter(Boolean) as Transaction[];
+  // sort ใหม่ (ล่าสุดก่อน) ตาม date+time
+  mapped.sort((a, b) => {
+    const ak = `${a.date} ${a.time ?? ""}`;
+    const bk = `${b.date} ${b.time ?? ""}`;
+    return bk.localeCompare(ak);
+  });
+  return mapped;
+}
+
 export const TransactionService = {
   async list(params: ListParams = {}): Promise<ListResult> {
     const {
@@ -41,8 +69,10 @@ export const TransactionService = {
       pageSize = 10,
     } = params;
 
-    let rows = [...memory];
+    const all = await fetchAll();
 
+    // filters
+    let rows = all;
     if (type !== "all") rows = rows.filter((r) => r.type === type);
     if (category) rows = rows.filter((r) => r.category === category);
     if (dateFrom) rows = rows.filter((r) => r.date >= dateFrom);
@@ -56,8 +86,6 @@ export const TransactionService = {
       );
     }
 
-    rows.sort((a, b) => (a.date < b.date ? 1 : -1));
-
     const total = rows.length;
     const start = (page - 1) * pageSize;
     const data = rows.slice(start, start + pageSize);
@@ -65,63 +93,30 @@ export const TransactionService = {
     return { data, total, page, pageSize };
   },
 
-  async create(payload: TransactionFormValues): Promise<Transaction> {
-    const parsed = transactionSchema.parse(payload);
-    const now = new Date().toISOString();
-    const row: Transaction = {
-      ...parsed,
-      id: `txn_${nanoid(8)}`,
-      createdAt: now,
-      updatedAt: now,
-    };
-    memory.unshift(row);
-    return row;
-  },
-
-  async update(
-    id: string,
-    payload: TransactionFormValues
-  ): Promise<Transaction> {
-    const parsed = transactionSchema.parse(payload);
-    const idx = memory.findIndex((r) => r.id === id);
-    if (idx === -1) throw new Error("Transaction not found");
-    const updated = {
-      ...memory[idx],
-      ...parsed,
-      updatedAt: new Date().toISOString(),
-    };
-    memory[idx] = updated;
-    return updated;
-  },
-
-  async remove(id: string): Promise<void> {
-    memory = memory.filter((r) => r.id !== id);
-  },
-
   async exportCSV(params: ListParams = {}): Promise<Blob> {
-    const { data } = await this.list({ ...params, page: 1, pageSize: 10_000 });
+    const { data } = await this.list({ ...params, page: 1, pageSize: 50_000 });
     const header = [
       "id",
       "date",
+      "time",
       "type",
       "category",
       "amount",
       "note",
-      "status",
-      "source",
     ].join(",");
     const body = data
       .map((r) =>
         [
           r.id,
           r.date,
+          r.time ?? "",
           r.type,
-          r.category,
+          r.category.replace(/"/g, '""'),
           r.amount,
-          JSON.stringify(r.note ?? ""),
-          r.status,
-          r.source,
-        ].join(",")
+          (r.note ?? "").replace(/"/g, '""'),
+        ]
+          .map((v) => (typeof v === "string" && v.includes(",") ? `"${v}"` : v))
+          .join(",")
       )
       .join("\n");
     const csv = `${header}\n${body}`;

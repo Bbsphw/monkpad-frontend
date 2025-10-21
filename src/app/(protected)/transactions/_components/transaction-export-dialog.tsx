@@ -1,4 +1,5 @@
 // app/(protected)/transactions/_components/transaction-export-dialog.tsx
+
 "use client";
 
 import { Button } from "@/components/ui/button";
@@ -40,13 +41,13 @@ export default function TransactionExportDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline">Export</Button>
+        <Button variant="outline">Export CSV</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>ส่งออกข้อมูล</DialogTitle>
           <DialogDescription>
-            บันทึก Transactions เป็นไฟล์ .csv
+            ดาวน์โหลดรายการธุรกรรมตามเงื่อนไขปัจจุบันเป็นไฟล์ .csv
           </DialogDescription>
         </DialogHeader>
         <div className="flex justify-end gap-2">
