@@ -318,7 +318,7 @@ export default function TransactionTable() {
                           date: r.date,
                           time: r.time?.slice(0, 5) ?? "12:00",
                         }}
-                        onUpdated={reload}
+                        // onUpdated={reload}
                         size="icon"
                       />
                       <TransactionDeleteDialog row={r} />

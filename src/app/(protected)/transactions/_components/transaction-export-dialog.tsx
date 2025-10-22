@@ -12,18 +12,46 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useState } from "react";
-import { TransactionService } from "../_services/transaction-service";
 import { useTransactionsContext } from "./transaction-filters";
 
 export default function TransactionExportDialog() {
   const [open, setOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);
-  const { params } = useTransactionsContext();
+
+  // ✅ ดึงแถวทั้งหมดจาก cache แล้วกรองเอง (แบบเดียวกับตาราง)
+  const { params, rows, pagination } = useTransactionsContext();
 
   async function handleExportCSV() {
     setDownloading(true);
     try {
-      const blob = await TransactionService.exportCSV(params);
+      // รวมทั้งเพจทั้งหมด: ให้สร้างใหม่จาก rows+params อีกที (หรือไปดึงจาก SWR all ใน hook ก็ได้)
+      const header = [
+        "id",
+        "date",
+        "time",
+        "type",
+        "category",
+        "amount",
+        "note",
+      ].join(",");
+      const body = rows
+        .map((r) =>
+          [
+            r.id,
+            r.date,
+            r.time ?? "",
+            r.type,
+            r.category.replace(/"/g, '""'),
+            r.amount,
+            (r.note ?? "").replace(/"/g, '""'),
+          ]
+            .map((v) => (typeof v === "string" && v.includes(",") ? "${v}" : v))
+            .join(",")
+        )
+        .join("\n");
+      const csv = `${header}\n${body}`;
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -40,7 +68,7 @@ export default function TransactionExportDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
+      <DialogTrigger>
         <Button variant="outline">Export CSV</Button>
       </DialogTrigger>
       <DialogContent>

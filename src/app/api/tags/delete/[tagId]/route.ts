@@ -1,4 +1,5 @@
 // src/app/api/tags/delete/[tagId]/route.ts
+
 import { cookies } from "next/headers";
 import { env } from "@/lib/env";
 import { handleRouteError, jsonError } from "@/lib/errors";
@@ -8,10 +9,9 @@ export const dynamic = "force-dynamic";
 
 export async function DELETE(
   _req: Request,
-  ctx: { params: Promise<{ tagId: string }> } // ⭐️ Next 15: params ต้อง await
+  ctx: { params: Promise<{ tagId: string }> }
 ) {
   try {
-    // ⭐️ ต้อง await ก่อนใช้ ไม่งั้นจะเจอ error `params should be awaited`
     const { tagId } = await ctx.params;
     const id = Number(tagId);
     if (!id) return jsonError(422, "Invalid tag id");

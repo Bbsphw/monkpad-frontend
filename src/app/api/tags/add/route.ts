@@ -1,4 +1,5 @@
 // src/app/api/tags/add/route.ts
+
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { env } from "@/lib/env";
@@ -28,7 +29,6 @@ export async function POST(req: Request) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        // ★ สำคัญ: ต้องส่ง Bearer ไปด้วย เพราะ /tags ทั้งชุดมี Depends(require_user)
         Authorization: `Bearer ${token}`,
         Accept: "application/json",
       },

@@ -58,7 +58,7 @@ type Props = {
 export default function TransactionEditDialog({
   id,
   defaultValues,
-  onUpdated,
+  // onUpdated,
   size = "icon",
 }: Props) {
   const [open, setOpen] = React.useState(false);
@@ -102,8 +102,17 @@ export default function TransactionEditDialog({
       }
 
       toast.success("อัปเดตรายการแล้ว");
+      // ✅ แจ้งทุกที่ว่า transactions เปลี่ยน
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("mp:transactions:changed", {
+            detail: { reason: "edit" },
+          })
+        );
+      }
+
       setOpen(false);
-      onUpdated?.();
+      // onUpdated?.();
     } catch (e: any) {
       toast.error("อัปเดตไม่สำเร็จ", { description: e?.message });
     }

@@ -1,4 +1,5 @@
 // src/components/upload/UploadImage.tsx
+
 "use client";
 
 import * as React from "react";
@@ -29,25 +30,19 @@ import { format } from "date-fns";
 import { th } from "date-fns/locale/th";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useTags } from "@/hooks/use-tags";
 
-// -------------------- Config --------------------
+/* -------------------- Config -------------------- */
 const MAX_FILE_SIZE_MB = 10;
-const ACCEPTED_TYPES = ["image/png", "image/jpeg", "image/webp"];
-
-type Tag = {
-  id: number;
-  tag: string;
-  type: "income" | "expense";
-  value: number;
-};
+const ACCEPTED_TYPES = ["image/png", "image/jpeg"];
 const DEFAULT_TAGS = new Set(["รายรับอื่นๆ", "รายจ่ายอื่นๆ"]);
 
-// -------------------- Zod Schema --------------------
+/* -------------------- Zod Schema -------------------- */
 const formSchema = z.object({
   slip: z
     .instanceof(File, { message: "โปรดอัปโหลดรูปสลิป" })
     .refine((file) => ACCEPTED_TYPES.includes(file.type), {
-      message: "รองรับเฉพาะ PNG, JPG หรือ WebP",
+      message: "รองรับเฉพาะ PNG, JPG",
     })
     .refine((file) => file.size <= MAX_FILE_SIZE_MB * 1024 * 1024, {
       message: `ขนาดไฟล์ต้องไม่เกิน ${MAX_FILE_SIZE_MB}MB`,
@@ -93,12 +88,13 @@ interface UploadImageProps {
 export default function UploadImage({ onSuccess }: UploadImageProps) {
   const [preview, setPreview] = React.useState<string | null>(null);
   const [isDragActive, setIsDragActive] = React.useState(false);
-  const [tags, setTags] = React.useState<Tag[]>([]);
   const [isAddingCategory, setIsAddingCategory] = React.useState(false);
   const [newCategoryName, setNewCategoryName] = React.useState("");
   const [ocrLoading, setOcrLoading] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const { tags, mutate } = useTags();
 
   const {
     control,
@@ -125,37 +121,26 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
   const selectedTagId = watch("tag_id");
   const amount = watch("amount");
 
-  // -------------------- Load Tags --------------------
-  const loadTags = React.useCallback(async () => {
-    try {
-      const res = await fetch("/api/tags/me", { cache: "no-store" });
-      const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.ok) throw new Error(json?.error?.message);
-      setTags(json.data as Tag[]);
-    } catch {
-      setTags([]);
-    }
-  }, []);
-  React.useEffect(() => {
-    loadTags();
-  }, [loadTags]);
-
   const typeTags = React.useMemo(
     () => tags.filter((t) => t.type === type),
     [tags, type]
   );
+
   React.useEffect(() => {
-    setValue("tag_id", "", { shouldValidate: true });
+    setValue("tag_id", "" as any, { shouldValidate: true });
   }, [type, setValue]);
 
-  // -------------------- File / OCR --------------------
+  /* -------------------- File / OCR -------------------- */
   const handleFileSelect = React.useCallback(
     (file: File | null) => {
       if (!file) {
         setPreview(null);
+        setValue("slip", undefined as any, { shouldValidate: true });
         return;
       }
+      // set RHF value
       setValue("slip", file as any, { shouldValidate: true });
+      // make/cleanup object url
       const url = URL.createObjectURL(file);
       setPreview((prev) => {
         if (prev) URL.revokeObjectURL(prev);
@@ -164,6 +149,13 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
     },
     [setValue]
   );
+
+  const handleDrag = React.useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") setIsDragActive(true);
+    else if (e.type === "dragleave") setIsDragActive(false);
+  }, []);
 
   const handleDrop = React.useCallback(
     (e: React.DragEvent) => {
@@ -176,12 +168,17 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
     [handleFileSelect]
   );
 
-  const handleDrag = React.useCallback((e: React.DragEvent) => {
-    e.preventDefault();
+  const handleChooseFile = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") setIsDragActive(true);
-    else if (e.type === "dragleave") setIsDragActive(false);
-  }, []);
+    fileInputRef.current?.click();
+  };
+
+  const onDropzoneKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      fileInputRef.current?.click();
+    }
+  };
 
   const runOCR = async () => {
     const file = watch("slip") as File | undefined;
@@ -214,7 +211,7 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
     }
   };
 
-  // -------------------- Add / Delete Category --------------------
+  /* -------------------- Add / Delete Category -------------------- */
   const addCategory = async () => {
     const name = newCategoryName.trim();
     if (!name) return;
@@ -230,21 +227,7 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
       toast.success("เพิ่มหมวดหมู่สำเร็จ");
       setNewCategoryName("");
       setIsAddingCategory(false);
-
-      await loadTags();
-
-      const created =
-        (json?.data as Tag | undefined) ??
-        (await (async () => {
-          const latest = await fetch("/api/tags/me", { cache: "no-store" })
-            .then((r) => r.json())
-            .catch(() => null);
-          const arr = (latest?.data as Tag[]) || [];
-          return arr.find((t) => t.tag === name && t.type === type);
-        })());
-
-      if (created)
-        setValue("tag_id", String(created.id) as any, { shouldValidate: true });
+      await mutate();
     } catch (err: any) {
       toast.error("เพิ่มหมวดหมู่ไม่สำเร็จ", { description: err?.message });
     }
@@ -275,7 +258,7 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
         throw new Error(json?.error?.message || "ลบหมวดหมู่ไม่สำเร็จ");
 
       toast.success("ลบหมวดหมู่สำเร็จ");
-      await loadTags();
+      await mutate();
       setValue("tag_id", "" as any, { shouldValidate: true });
     } catch (err: any) {
       toast.error("ลบหมวดหมู่ไม่สำเร็จ", { description: err?.message });
@@ -284,7 +267,7 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
     }
   };
 
-  // -------------------- Submit --------------------
+  /* -------------------- Submit -------------------- */
   const onSubmit: SubmitHandler<UploadImageInput> = async (raw) => {
     const values = formSchema.parse(raw) as UploadImageOutput;
 
@@ -307,6 +290,14 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
         throw new Error(json?.error?.message || "บันทึกรายการไม่สำเร็จ");
 
       toast.success("บันทึกรายการสำเร็จ");
+      // แจ้งทั้งระบบว่ามีรายการถูกเปลี่ยนแปลง
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("mp:transactions:changed", {
+            detail: { reason: "upload" },
+          })
+        );
+      }
       onSuccess?.();
 
       reset({
@@ -317,13 +308,17 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
         date: new Date(),
         time: "12:00",
       });
-      setPreview(null);
+      // clear preview url
+      setPreview((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
     } catch (err: any) {
       toast.error("อัปโหลดไม่สำเร็จ", { description: err?.message });
     }
   };
 
-  // -------------------- UI --------------------
+  /* -------------------- UI -------------------- */
   return (
     <Card className="w-full border-0 shadow-none">
       <CardContent className="p-0">
@@ -402,7 +397,7 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
                     ลากและวางหรือคลิกเพื่ออัปโหลด
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    PNG, JPG, WebP • สูงสุด {MAX_FILE_SIZE_MB}MB
+                    PNG, JPG • สูงสุด {MAX_FILE_SIZE_MB}MB
                   </p>
                   <Button type="button" variant="outline" size="sm">
                     เลือกไฟล์
@@ -689,15 +684,19 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
               variant="outline"
               className="flex-1"
               onClick={() => {
+                const t = watch("type");
                 reset({
-                  type,
+                  type: t,
                   amount: "",
                   tag_id: "",
                   note: "",
                   date: new Date(),
                   time: "12:00",
                 });
-                setPreview(null);
+                setPreview((prev) => {
+                  if (prev) URL.revokeObjectURL(prev);
+                  return null;
+                });
               }}
               disabled={isSubmitting}
               size="lg"

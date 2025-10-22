@@ -97,9 +97,10 @@
 // }
 
 // src/app/(protected)/layout.tsx
+
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
-
+import { SWRConfig } from "swr";
 import { getProfile } from "@/lib/auth-client";
 import { AppSidebar } from "@/components/navbar/app-sidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -129,21 +130,30 @@ export default async function ProtectedLayout({
   };
 
   return (
-    <SidebarProvider
-      style={
-        {
-          "--sidebar-width": "calc(var(--spacing) * 72)",
-          "--header-height": "calc(var(--spacing) * 12)",
-        } as React.CSSProperties
-      }
+    <SWRConfig
+      value={{
+        dedupingInterval: 5000,
+        revalidateOnFocus: false,
+        revalidateOnReconnect: false,
+        keepPreviousData: true,
+      }}
     >
-      <AppSidebar user={user} />
-      <SidebarInset>
-        <SiteHeaderDashboard />
-        <main className="flex flex-1 flex-col p-4 md:p-6 gap-6">
-          {children}
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
+      <SidebarProvider
+        style={
+          {
+            "--sidebar-width": "calc(var(--spacing) * 72)",
+            "--header-height": "calc(var(--spacing) * 12)",
+          } as React.CSSProperties
+        }
+      >
+        <AppSidebar user={user} />
+        <SidebarInset>
+          <SiteHeaderDashboard />
+          <main className="flex flex-1 flex-col p-4 md:p-6 gap-6">
+            {children}
+          </main>
+        </SidebarInset>
+      </SidebarProvider>
+    </SWRConfig>
   );
 }
