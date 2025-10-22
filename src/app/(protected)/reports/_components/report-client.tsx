@@ -56,11 +56,8 @@ export default function ReportClient() {
   const [month, setMonth] = React.useState<number>(today.getMonth() + 1);
   const [type] = React.useState<"income" | "expense" | "all">("all");
 
-  const { data, loading, error, reload } = useReports({ year, month, type });
-
-  React.useEffect(() => {
-    void reload();
-  }, [year, month, type, reload]);
+  // SWR จะ fetch เองตาม key (year, month, type) ไม่ต้อง useEffect เรียก reload ซ้ำ
+  const { data, loading, error } = useReports({ year, month, type });
 
   if (loading) return <ReportSkeleton />;
 

@@ -1,6 +1,5 @@
 // src/app/(protected)/reports/_components/report-cards.tsx
 
-// src/app/(protected)/reports/_components/report-cards.tsx
 "use client";
 
 import * as React from "react";
