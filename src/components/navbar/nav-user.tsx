@@ -1,4 +1,5 @@
 // src/components/dashboard/nav-user.tsx
+
 "use client";
 
 import {
@@ -32,6 +33,7 @@ import { ChangeUsernameDialog } from "@/components/account/change-username-dialo
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+/** เมนูผู้ใช้ที่ footer ของ Sidebar: โปรไฟล์ + เมนูแก้ไขบัญชี + ออกจากระบบ */
 export function NavUser({
   user,
 }: {
@@ -40,6 +42,7 @@ export function NavUser({
   const { isMobile } = useSidebar();
   const router = useRouter();
 
+  /** ออกจากระบบ: เรียก API แล้ว redirect ไปหน้า sign-in */
   const onLogout = async () => {
     try {
       const res = await fetch("/api/auth/logout", { method: "GET" });
@@ -55,6 +58,7 @@ export function NavUser({
     <SidebarMenu>
       <SidebarMenuItem>
         <DropdownMenu>
+          {/* ปุ่มกดด้านขวาล่างของ sidebar แสดงชื่อ/อีเมลและไอคอน ... */}
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
               size="lg"
@@ -76,12 +80,14 @@ export function NavUser({
             </SidebarMenuButton>
           </DropdownMenuTrigger>
 
+          {/* เนื้อหาเมนูดรอปดาวน์: ปรับตำแหน่งตาม isMobile */}
           <DropdownMenuContent
             className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
             side={isMobile ? "bottom" : "right"}
             align="end"
             sideOffset={4}
           >
+            {/* ส่วนหัว: แสดง avatar + ชื่อ + อีเมล อีกครั้ง */}
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <Avatar className="h-8 w-8 rounded-lg">
@@ -101,6 +107,7 @@ export function NavUser({
 
             <DropdownMenuSeparator />
 
+            {/* กลุ่มเมนูแก้ไขข้อมูลบัญชี (เปิด Dialog แบบ asChild) */}
             <DropdownMenuGroup>
               <ChangeUsernameDialog
                 asChild
@@ -133,6 +140,7 @@ export function NavUser({
 
             <DropdownMenuSeparator />
 
+            {/* ออกจากระบบ */}
             <DropdownMenuItem onClick={onLogout}>
               <LogOut />
               Log out

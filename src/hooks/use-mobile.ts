@@ -1,19 +1,38 @@
-import * as React from "react"
+// src/hooks/use-mobile.ts
 
-const MOBILE_BREAKPOINT = 768
+import * as React from "react";
 
-export function useIsMobile() {
-  const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined)
+const MOBILE_BREAKPOINT = 768;
+
+/**
+ * Hook สำหรับตรวจว่า viewport ปัจจุบันอยู่ในช่วง mobile หรือไม่
+ * - ใช้ `window.matchMedia`
+ * - ปลอดภัยต่อ SSR (Next.js)
+ * - Cleanup event listener ทุกครั้ง
+ */
+export function useIsMobile(breakpoint: number = MOBILE_BREAKPOINT): boolean {
+  const [isMobile, setIsMobile] = React.useState<boolean>(() => {
+    // ป้องกันตอน SSR ที่ไม่มี window
+    if (typeof window === "undefined") return false;
+    return window.innerWidth < breakpoint;
+  });
 
   React.useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
-    const onChange = () => {
-      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    }
-    mql.addEventListener("change", onChange)
-    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    return () => mql.removeEventListener("change", onChange)
-  }, [])
+    if (typeof window === "undefined") return;
 
-  return !!isMobile
+    const mql = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
+
+    // ตั้งค่าครั้งแรก
+    setIsMobile(mql.matches);
+
+    // อัปเดตเมื่อมีการเปลี่ยนขนาดหน้าจอ
+    const handleChange = (event: MediaQueryListEvent) => {
+      setIsMobile(event.matches);
+    };
+
+    mql.addEventListener("change", handleChange);
+    return () => mql.removeEventListener("change", handleChange);
+  }, [breakpoint]);
+
+  return isMobile;
 }

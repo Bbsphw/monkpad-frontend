@@ -33,11 +33,14 @@ import { toast } from "sonner";
 import { useTags } from "@/hooks/use-tags";
 
 /* -------------------- Config -------------------- */
+// จำกัดขนาดไฟล์ และชนิดไฟล์ที่รองรับ (เพื่อ UX ที่ดี/ป้องกันอัปโหลดไฟล์ไม่ถูกชนิด)
 const MAX_FILE_SIZE_MB = 10;
 const ACCEPTED_TYPES = ["image/png", "image/jpeg"];
+// หมวดหมู่ตั้งต้น (กันลบ)
 const DEFAULT_TAGS = new Set(["รายรับอื่นๆ", "รายจ่ายอื่นๆ"]);
 
 /* -------------------- Zod Schema -------------------- */
+// schema หลักของฟอร์ม (รองรับ slip แบบ optional เพราะผู้ใช้อาจกรอกเอง)
 const formSchema = z.object({
   slip: z
     .instanceof(File, { message: "โปรดอัปโหลดรูปสลิป" })
@@ -49,10 +52,10 @@ const formSchema = z.object({
     })
     .optional(),
 
-  type: z.enum(["income", "expense"]),
+  type: z.enum(["income", "expense"]), // ประเภทธุรกรรม
 
   amount: z
-    .union([z.string(), z.number()])
+    .union([z.string(), z.number()]) // รับได้ทั้ง string/number เพื่อรองรับ inputMode decimal
     .transform((v) => (typeof v === "string" ? Number(v.replace(/,/g, "")) : v))
     .refine((n) => Number.isFinite(n), { message: "จำนวนเงินไม่ถูกต้อง" })
     .refine((n) => n > 0, { message: "จำนวนเงินต้องมากกว่า 0" }),
@@ -78,24 +81,29 @@ const formSchema = z.object({
     }, "เวลาไม่ถูกต้อง (ช่วง 00:00–23:59)"),
 });
 
+// แยก input/output เพื่อบอก TS หลังผ่าน transform/coerce แล้วจะเป็นชนิดไหน
 type UploadImageInput = z.input<typeof formSchema>;
 type UploadImageOutput = z.output<typeof formSchema>;
 
+/* -------------------- Props -------------------- */
 interface UploadImageProps {
-  onSuccess?: () => void;
+  onSuccess?: () => void; // callback หลังบันทึกสำเร็จ (ให้ parent ปิด dialog/refresh ได้)
 }
 
 export default function UploadImage({ onSuccess }: UploadImageProps) {
-  const [preview, setPreview] = React.useState<string | null>(null);
-  const [isDragActive, setIsDragActive] = React.useState(false);
-  const [isAddingCategory, setIsAddingCategory] = React.useState(false);
-  const [newCategoryName, setNewCategoryName] = React.useState("");
-  const [ocrLoading, setOcrLoading] = React.useState(false);
-  const [deleting, setDeleting] = React.useState(false);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  /* -------------------- Local states -------------------- */
+  const [preview, setPreview] = React.useState<string | null>(null); // URL preview ของรูปสลิป
+  const [isDragActive, setIsDragActive] = React.useState(false); // ไฮไลต์ dropzone ตอนลาก
+  const [isAddingCategory, setIsAddingCategory] = React.useState(false); // โหมดเพิ่มหมวด
+  const [newCategoryName, setNewCategoryName] = React.useState(""); // ชื่อหมวดใหม่
+  const [ocrLoading, setOcrLoading] = React.useState(false); // สถานะกำลัง OCR
+  const [deleting, setDeleting] = React.useState(false); // สถานะกำลังลบหมวด
+  const fileInputRef = React.useRef<HTMLInputElement>(null); // อ้างอิง input file เพื่อ trig ด้วยปุ่ม
 
+  // ดึง tags จาก hook กลาง (ใช้ SWR ในตัว, มี mutate สำหรับรีโหลด)
   const { tags, mutate } = useTags();
 
+  /* -------------------- React Hook Form -------------------- */
   const {
     control,
     handleSubmit,
@@ -114,23 +122,27 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
       date: new Date(),
       time: "12:00",
     },
-    mode: "onChange",
+    mode: "onChange", // validate บนการเปลี่ยนค่า
   });
 
+  // watch ค่าเพื่อแสดง/ปรับ UI
   const type = watch("type");
   const selectedTagId = watch("tag_id");
   const amount = watch("amount");
 
+  // กรองหมวดตาม type ปัจจุบัน
   const typeTags = React.useMemo(
     () => tags.filter((t) => t.type === type),
     [tags, type]
   );
 
+  // เมื่อเปลี่ยน type ให้รีเซ็ต tag_id เพื่อบังคับเลือกใหม่ (ป้องกันหมวดข้าม type)
   React.useEffect(() => {
     setValue("tag_id", "" as any, { shouldValidate: true });
   }, [type, setValue]);
 
-  /* -------------------- File / OCR -------------------- */
+  /* -------------------- File / OCR handlers -------------------- */
+  // จัดการตั้งค่าไฟล์ + สร้าง/ล้าง objectURL สำหรับ preview (อย่าลืม revoke กัน memory leak)
   const handleFileSelect = React.useCallback(
     (file: File | null) => {
       if (!file) {
@@ -138,9 +150,7 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
         setValue("slip", undefined as any, { shouldValidate: true });
         return;
       }
-      // set RHF value
       setValue("slip", file as any, { shouldValidate: true });
-      // make/cleanup object url
       const url = URL.createObjectURL(file);
       setPreview((prev) => {
         if (prev) URL.revokeObjectURL(prev);
@@ -150,6 +160,7 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
     [setValue]
   );
 
+  // UI drag-n-drop
   const handleDrag = React.useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -157,6 +168,7 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
     else if (e.type === "dragleave") setIsDragActive(false);
   }, []);
 
+  // drop ไฟล์ลงกล่อง
   const handleDrop = React.useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
@@ -168,11 +180,11 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
     [handleFileSelect]
   );
 
+  // ปุ่มเลือกไฟล์ (คีย์บอร์ด/คลิก)
   const handleChooseFile = (e: React.MouseEvent) => {
     e.stopPropagation();
     fileInputRef.current?.click();
   };
-
   const onDropzoneKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
@@ -180,6 +192,7 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
     }
   };
 
+  // เรียก OCR จากไฟล์ที่เลือก → set amount/date/time ให้ฟอร์ม
   const runOCR = async () => {
     const file = watch("slip") as File | undefined;
     if (!file) {
@@ -212,6 +225,7 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
   };
 
   /* -------------------- Add / Delete Category -------------------- */
+  // เพิ่มหมวดใหม่ (ผูกกับ type ปัจจุบัน)
   const addCategory = async () => {
     const name = newCategoryName.trim();
     if (!name) return;
@@ -227,12 +241,13 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
       toast.success("เพิ่มหมวดหมู่สำเร็จ");
       setNewCategoryName("");
       setIsAddingCategory(false);
-      await mutate();
+      await mutate(); // รีโหลดรายการ tags
     } catch (err: any) {
       toast.error("เพิ่มหมวดหมู่ไม่สำเร็จ", { description: err?.message });
     }
   };
 
+  // ลบหมวดที่เลือก (กันลบ default) และบังคับย้ายธุรกรรมเดิมไปหมวด default ฝั่ง server
   const deleteCategory = async () => {
     const selectedIdNum = Number(selectedTagId || 0);
     const tag = tags.find((t) => t.id === selectedIdNum);
@@ -258,8 +273,8 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
         throw new Error(json?.error?.message || "ลบหมวดหมู่ไม่สำเร็จ");
 
       toast.success("ลบหมวดหมู่สำเร็จ");
-      await mutate();
-      setValue("tag_id", "" as any, { shouldValidate: true });
+      await mutate(); // รีโหลด tags
+      setValue("tag_id", "" as any, { shouldValidate: true }); // บังคับเลือกใหม่
     } catch (err: any) {
       toast.error("ลบหมวดหมู่ไม่สำเร็จ", { description: err?.message });
     } finally {
@@ -268,7 +283,9 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
   };
 
   /* -------------------- Submit -------------------- */
+  // ส่งข้อมูลไปสร้างธุรกรรมใหม่ (ฝั่ง server จะ map tag_id -> type/ชื่อหมวดเอง)
   const onSubmit: SubmitHandler<UploadImageInput> = async (raw) => {
+    // parse ด้วย zod อีกรอบ เพื่อให้มั่นใจเรื่อง coercion/validation
     const values = formSchema.parse(raw) as UploadImageOutput;
 
     try {
@@ -290,7 +307,8 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
         throw new Error(json?.error?.message || "บันทึกรายการไม่สำเร็จ");
 
       toast.success("บันทึกรายการสำเร็จ");
-      // แจ้งทั้งระบบว่ามีรายการถูกเปลี่ยนแปลง
+
+      // กระจาย event ส่วนกลางให้ SWR hooks ที่ฟังอยู่ (transactions) รีโหลด cache
       if (typeof window !== "undefined") {
         window.dispatchEvent(
           new CustomEvent("mp:transactions:changed", {
@@ -298,8 +316,9 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
           })
         );
       }
-      onSuccess?.();
+      onSuccess?.(); // ให้ parent ปิด dialog/refresh server components
 
+      // reset ฟอร์มกลับค่าเริ่มต้น (type คงตามเดิมเพื่อความสะดวก)
       reset({
         type: values.type,
         amount: "",
@@ -308,7 +327,8 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
         date: new Date(),
         time: "12:00",
       });
-      // clear preview url
+
+      // ล้าง preview objectURL
       setPreview((prev) => {
         if (prev) URL.revokeObjectURL(prev);
         return null;
@@ -352,6 +372,7 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
               </Button>
             </div>
 
+            {/* Dropzone + Preview รูป */}
             <div
               className={cn(
                 "relative cursor-pointer rounded-lg border-2 border-dashed p-6 text-center transition-colors",
@@ -365,6 +386,10 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
               onDragOver={handleDrag}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
+              onKeyDown={onDropzoneKeyDown}
+              role="button"
+              tabIndex={0}
+              aria-label="อัปโหลดสลิป"
             >
               {preview ? (
                 <div className="relative">
@@ -377,6 +402,7 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
                       sizes="(max-width: 768px) 100vw, 700px"
                     />
                   </div>
+                  {/* ปุ่มลบรูป/ล้าง preview */}
                   <Button
                     type="button"
                     variant="destructive"
@@ -386,6 +412,7 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
                       e.stopPropagation();
                       handleFileSelect(null);
                     }}
+                    aria-label="ลบรูปสลิป"
                   >
                     <X className="h-3 w-3" />
                   </Button>
@@ -399,11 +426,17 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
                   <p className="text-xs text-muted-foreground">
                     PNG, JPG • สูงสุด {MAX_FILE_SIZE_MB}MB
                   </p>
-                  <Button type="button" variant="outline" size="sm">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleChooseFile}
+                  >
                     เลือกไฟล์
                   </Button>
                 </div>
               )}
+              {/* input file จริง (ซ่อนไว้) */}
               <Input
                 ref={fileInputRef}
                 id="slip"
@@ -424,6 +457,7 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
               <Label>ประเภท *</Label>
+              {/* ใช้ Controller เพื่อ bind กับ shadcn/ui Select */}
               <Controller
                 control={control}
                 name="type"
@@ -460,6 +494,7 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
                   {errors.amount.message as string}
                 </p>
               )}
+              {/* แสดงจำนวนเงินแบบฟอร์แมตเมื่อมีค่า */}
               {amount !== "" && amount !== undefined && (
                 <p className="text-xs text-muted-foreground">
                   {new Intl.NumberFormat("th-TH", {
@@ -482,6 +517,7 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
             <div className="flex items-center justify-between">
               <Label>หมวดหมู่ *</Label>
               <div className="flex items-center gap-2">
+                {/* เปิดอินพุตเพิ่มหมวดใหม่ */}
                 <Button
                   type="button"
                   variant="ghost"
@@ -490,6 +526,7 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
                 >
                   <Plus className="mr-1 h-3 w-3" /> เพิ่มหมวดหมู่
                 </Button>
+                {/* ปุ่มลบหมวด (แสดงเมื่อมีการเลือก) */}
                 {selectedTagId ? (
                   <Button
                     type="button"
@@ -505,6 +542,7 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
               </div>
             </div>
 
+            {/* โหมดเพิ่มหมวดใหม่ */}
             {isAddingCategory ? (
               <div className="flex gap-2">
                 <Input
@@ -529,6 +567,7 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
                 </Button>
               </div>
             ) : (
+              // เลือกหมวดจากรายการตามประเภท
               <Controller
                 control={control}
                 name="tag_id"
@@ -595,6 +634,7 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
 
           {/* Date & Time */}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {/* Date picker */}
             <div className="space-y-2">
               <Label>วันที่ *</Label>
               <Controller
@@ -639,6 +679,7 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
               )}
             </div>
 
+            {/* Time input */}
             <div className="space-y-2">
               <Label htmlFor="time">เวลา (HH:MM) *</Label>
               <Controller
@@ -679,6 +720,8 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
                 "บันทึกรายการ"
               )}
             </Button>
+
+            {/* รีเซ็ตฟอร์ม (เก็บ type เดิมไว้ให้) + ล้าง preview */}
             <Button
               type="button"
               variant="outline"

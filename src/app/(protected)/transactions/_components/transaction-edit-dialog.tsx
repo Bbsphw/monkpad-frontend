@@ -29,19 +29,26 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 
-/* ----------------- Zod schema ----------------- */
+/* ───────────────────────────────── Zod schema ─────────────────────────────────
+ * - ใช้ z.coerce เพื่อรองรับค่า string/unknown จากอินพุต แล้วแปลงเป็นชนิดที่ต้องการ
+ * - แยก "input type" และ "output type" ชัดเจนเพื่อให้ react-hook-form รู้ชนิดตอน validate
+ * --------------------------------------------------------------------------- */
 const FormSchema = z.object({
   amount: z.coerce.number().positive("จำนวนเงินต้องมากกว่า 0"),
   note: z.string().max(500).optional(),
-  date: z.coerce.date(), // <- รับ unknown, คืน Date
+  date: z.coerce.date(), // รับ unknown แล้ว coerce เป็น Date
   time: z.string().regex(/^\d{2}:\d{2}$/, "เวลาไม่ถูกต้อง (HH:MM)"),
 });
 
-// 🔥 สำคัญ: แยกชนิด input/output ของ schema
-type FormInput = z.input<typeof FormSchema>; // ก่อน coerce: amount/date เป็น unknown
-type FormOutput = z.output<typeof FormSchema>; // หลัง coerce: amount:number, date:Date
+// ชนิดที่ form รับเข้ามาก่อน coerce (ตรงกับค่าจากอินพุต)
+type FormInput = z.input<typeof FormSchema>;
+// ชนิดที่ได้หลังผ่าน resolver (ใช้ใน onSubmit)
+type FormOutput = z.output<typeof FormSchema>;
 
-/* ----------------- Props ----------------- */
+/* ─────────────────────────────────── Props ───────────────────────────────────
+ * - defaultValues มาจาก row เดิมในตาราง → เก็บ date เป็น string (YYYY-MM-DD)
+ * - รองรับ size ปุ่ม trigger ทั้งแบบไอคอนและขนาดมาตรฐาน
+ * --------------------------------------------------------------------------- */
 type Props = {
   id: string;
   defaultValues: {
@@ -50,11 +57,11 @@ type Props = {
     date: string; // "YYYY-MM-DD"
     time?: string; // "HH:MM"
   };
-  onUpdated?: () => void;
+  onUpdated?: () => void; // เผื่อให้ผู้ใช้ component ส่ง callback มาเอง
   size?: "icon" | "sm" | "default";
 };
 
-/* ----------------- Component ----------------- */
+/* ─────────────────────────────── Component ─────────────────────────────── */
 export default function TransactionEditDialog({
   id,
   defaultValues,
@@ -63,27 +70,37 @@ export default function TransactionEditDialog({
 }: Props) {
   const [open, setOpen] = React.useState(false);
 
+  /* ------------------------------------------------------------------------
+   * useForm:
+   * - ใช้ resolver ที่ map FormInput -> FormOutput (ผ่าน zodResolver)
+   * - ตั้ง defaultValues เป็น “input shape” (date เป็น string)
+   * - mode: "onChange" ให้ feedback เร็ว ระหว่างพิมพ์
+   * --------------------------------------------------------------------- */
   const {
     control,
     handleSubmit,
     formState: { isSubmitting },
     reset,
   } = useForm<FormInput, any, FormOutput>({
-    // ให้ resolver map จาก FormInput -> FormOutput
     resolver: zodResolver(FormSchema) as Resolver<FormInput, any, FormOutput>,
-    // ใช้รูปแบบ "input" สำหรับ defaultValues (date เป็น string)
     defaultValues: {
       amount: defaultValues.amount,
       note: defaultValues.note ?? "",
-      date: defaultValues.date, // "YYYY-MM-DD"
-      time: (defaultValues.time ?? "12:00").slice(0, 5), // "HH:MM"
+      date: defaultValues.date, // ให้ z.coerce.date จัดการตอน validate/submit
+      time: (defaultValues.time ?? "12:00").slice(0, 5),
     },
     mode: "onChange",
   });
 
+  /* ------------------------------------------------------------------------
+   * onSubmit:
+   * - ขณะนี้ values.date เป็น Date แล้ว (ผ่าน coerce)
+   * - สร้าง payload ให้ตรง API (value, note, date: yyyy-MM-dd, time)
+   * - แจ้ง global event "mp:transactions:changed" เพื่อให้หน้าอื่น sync
+   * - ปิด dialog และ (ถ้าต้องการ) เรียก onUpdated จาก parent
+   * --------------------------------------------------------------------- */
   async function onSubmit(values: FormOutput) {
     try {
-      // values.date ณ จุดนี้เป็น Date แล้ว (เพราะผ่าน coerce)
       const payload = {
         value: values.amount,
         note: values.note ?? "",
@@ -102,7 +119,8 @@ export default function TransactionEditDialog({
       }
 
       toast.success("อัปเดตรายการแล้ว");
-      // ✅ แจ้งทุกที่ว่า transactions เปลี่ยน
+
+      // 📢 กระจายสัญญาณให้ส่วนอื่น ๆ ที่ฟังเหตุการณ์นี้อยู่ (dashboard/รายงาน ฯลฯ)
       if (typeof window !== "undefined") {
         window.dispatchEvent(
           new CustomEvent("mp:transactions:changed", {
@@ -112,36 +130,43 @@ export default function TransactionEditDialog({
       }
 
       setOpen(false);
-      // onUpdated?.();
+      // onUpdated?.(); // คงไว้เป็น option เผื่อ parent ต้องการ hook เอง
     } catch (e: any) {
       toast.error("อัปเดตไม่สำเร็จ", { description: e?.message });
     }
   }
 
-  // reset ค่า form ให้ตรง defaultValues ล่าสุดเมื่อ dialog ปิด/เปิดใหม่
+  /* ------------------------------------------------------------------------
+   * sync defaultValues → ฟอร์ม: เมื่อ dialog ถูกปิด แล้วเปิดใหม่
+   * - ป้องกันค่าเก่า “ค้าง” ในฟอร์ม หากผู้ใช้เปิดปิดหลายครั้ง
+   * --------------------------------------------------------------------- */
   React.useEffect(() => {
     if (!open) {
       reset({
         amount: defaultValues.amount,
         note: defaultValues.note ?? "",
-        date: defaultValues.date, // string
+        date: defaultValues.date, // string (จะถูก coerce เมื่อ validate/submit)
         time: (defaultValues.time ?? "12:00").slice(0, 5),
       });
     }
   }, [open, defaultValues, reset]);
 
-  // helper: แปลงค่า date (string | Date | undefined) ให้เป็น Date สำหรับ Calendar / แสดงผล
+  /* ------------------------------------------------------------------------
+   * toDate: แปลงค่าที่อาจเป็น string/Date/undefined → Date | undefined
+   * - ใช้สำหรับ Calendar และแสดงผลบนปุ่มเลือกวันที่
+   * - รองรับทั้งรูปแบบ "YYYY-MM-DD" และ ISO string
+   * --------------------------------------------------------------------- */
   function toDate(v: unknown): Date | undefined {
     if (!v) return undefined;
     if (v instanceof Date) return v;
     const s = String(v);
-    // รองรับทั้ง "YYYY-MM-DD" และ ISO
     const d = new Date(s);
     return Number.isNaN(d.getTime()) ? undefined : d;
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
+      {/* Trigger: ปุ่มแก้ไข (รองรับ size แบบไอคอน/อื่น ๆ) */}
       <DialogTrigger asChild>
         <Button variant="ghost" size={size} aria-label="แก้ไขรายการ">
           <Pencil className="h-4 w-4" />
@@ -156,6 +181,7 @@ export default function TransactionEditDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {/* ฟอร์มหลัก: ใช้ Controller เพื่อคุมค่าที่ต้องแปลง/format เอง */}
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           {/* Amount */}
           <div>
@@ -164,23 +190,23 @@ export default function TransactionEditDialog({
               name="amount"
               control={control}
               render={({ field, fieldState }) => {
+                // บังคับ value ให้เป็น string เสมอ เพื่อให้ input controlled
                 const value =
                   field.value === undefined || field.value === null
                     ? ""
-                    : String(field.value); // ← แปลงให้เป็น string เสมอ
+                    : String(field.value);
 
                 return (
                   <>
                     <Input
-                      // ❗️อย่า spread field ตรง ๆ เพราะ value: unknown
+                      // ❗️อย่า spread field ตรง ๆ (เพราะ field.value เป็น unknown)
                       name={field.name}
                       ref={field.ref}
                       onBlur={field.onBlur}
-                      // เก็บเป็น string ในอินพุต ให้ z.coerce.number จัดการเองตอน submit/validate
                       value={value}
-                      onChange={(e) => field.onChange(e.target.value)}
+                      onChange={(e) => field.onChange(e.target.value)} // ให้ z.coerce.number จัดการตอน validate
                       inputMode="decimal"
-                      type="text" // รองรับทศนิยม/ลูกน้ำได้ดีสุดบน mobile + desktop
+                      type="text" // ดีสำหรับ mobile + รองรับทศนิยม/ลูกน้ำ
                       placeholder="0.00"
                     />
                     {fieldState.error && (
@@ -193,8 +219,10 @@ export default function TransactionEditDialog({
               }}
             />
           </div>
+
           {/* Date / Time */}
           <div className="grid grid-cols-2 gap-3">
+            {/* Date picker: เก็บใน form เป็น string แต่แสดง/เลือกเป็น Date */}
             <div className="space-y-1.5">
               <Label>วันที่</Label>
               <Controller
@@ -223,7 +251,7 @@ export default function TransactionEditDialog({
                         <Calendar
                           mode="single"
                           selected={selected}
-                          // เก็บกลับเป็น string "YYYY-MM-DD" (อินพุตของ schema)
+                          // เก็บกลับเข้า form เป็น string "YYYY-MM-DD"
                           onSelect={(d) =>
                             d && field.onChange(format(d, "yyyy-MM-dd"))
                           }
@@ -237,6 +265,7 @@ export default function TransactionEditDialog({
               />
             </div>
 
+            {/* Time input: ใช้ชนิด time (step 60 วินาที) */}
             <div className="space-y-1.5">
               <Label>เวลา</Label>
               <Controller

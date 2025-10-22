@@ -1,4 +1,5 @@
 // src/app/(auth)/sign-in/signIn-client.tsx
+
 "use client";
 
 import { useMemo, useState } from "react";
@@ -24,10 +25,11 @@ import { Loading } from "@/components/common/loading";
 import { ForgotPasswordDialog } from "@/components/auth/forgot-password-dialog";
 
 /**
- * Schema:
- * - remember ใช้ .default(false) → zod "input type" = boolean | undefined
- * - z.infer<T> = "output type" → boolean
- * resolver ของ zodResolver ใช้ "input type" → เราจึงต้องตั้ง useForm เป็น z.input<typeof schema>
+ * ✅ Schema — ใช้ zod ตรวจข้อมูลฝั่ง client ก่อนส่ง API
+ * ----------------------------------------------------------
+ * - identifier: username หรือ email
+ * - password: ต้องกรอก
+ * - remember: boolean (optional)
  */
 const signInClientSchema = z.object({
   identifier: z.string().min(1, "กรุณากรอกชื่อผู้ใช้"),
@@ -35,28 +37,40 @@ const signInClientSchema = z.object({
   remember: z.boolean().default(false),
 });
 
-// ✅ ให้ฟอร์มใช้ input type ของ schema (ตรงกับ resolver)
+// React Hook Form จะใช้ "input type" ของ schema
 type SignInClientForm = z.input<typeof signInClientSchema>;
 
+/**
+ * Helper: ตรวจว่าเป็นรูปแบบ email หรือไม่
+ * ใช้เพื่อ prefill dialog ลืมรหัสผ่าน
+ */
 function isEmailLike(v: string) {
-  // เบา ๆ พอสำหรับ client (backend ตรวจจริงอีกชั้น)
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 }
 
+/**
+ * ✅ Client Component — ฟอร์มเข้าสู่ระบบ
+ * ---------------------------------------
+ * - handle UX ทั้งหมด: validation, show/hide password, toast
+ * - ใช้ react-hook-form + zodResolver เพื่อความปลอดภัย/ง่ายต่อการตรวจสอบ
+ * - ใช้ next/navigation เพื่อ redirect หลังล็อกอิน
+ */
 export default function SignInClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // ป้องกัน open-redirect
+  // ป้องกัน open redirect attack (ตรวจแค่เส้นทางภายใน)
   const nextParam = searchParams.get("next");
   const next =
     typeof nextParam === "string" && nextParam.startsWith("/")
       ? nextParam
       : "/dashboard";
 
+  // states
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  // ฟอร์มหลัก
   const {
     register,
     handleSubmit,
@@ -71,13 +85,20 @@ export default function SignInClient() {
     mode: "onTouched",
   });
 
-  // ใช้เฉพาะกรณีที่ identifier เป็นอีเมลจริงเท่านั้น → ค่อยส่งให้ dialog เป็น presetEmail
+  // ดึง email สำหรับใช้ใน ForgotPasswordDialog
   const identifier = watch("identifier");
   const presetEmail = useMemo(
     () => (isEmailLike(identifier ?? "") ? identifier.trim() : ""),
     [identifier]
   );
 
+  /**
+   * ✅ Handle submit
+   * ----------------
+   * - POST /api/auth/sign-in
+   * - ถ้า ok → toast success + redirect
+   * - ถ้า fail → แสดง error บนฟอร์ม + toast error
+   */
   const onSubmit: SubmitHandler<SignInClientForm> = async (data) => {
     setSubmitting(true);
     try {
@@ -97,16 +118,15 @@ export default function SignInClient() {
 
       if (!res.ok || !json?.ok) {
         const msg = json?.error?.message || "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง";
-        setError("identifier", {
-          message: "กรุณาตรวจสอบชื่อผู้ใช้อีกครั้ง",
-        });
+        // ตั้ง error ไปยังช่องที่เกี่ยวข้อง
+        setError("identifier", { message: "กรุณาตรวจสอบชื่อผู้ใช้อีกครั้ง" });
         setError("password", { message: "กรุณาตรวจสอบรหัสผ่านอีกครั้ง" });
         toast.error("เข้าสู่ระบบไม่สำเร็จ", { description: msg });
         return;
       }
 
       toast.success("เข้าสู่ระบบสำเร็จ");
-      router.replace(next);
+      router.replace(next); // redirect ไปหน้า dashboard
     } catch (err: any) {
       toast.error("เข้าสู่ระบบไม่สำเร็จ", {
         description: err?.message ?? "เกิดข้อผิดพลาด",
@@ -116,10 +136,12 @@ export default function SignInClient() {
     }
   };
 
+  /* ✅ UI ส่วนฟอร์ม */
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-soft px-4">
       <Card className="w-full max-w-md shadow-strong">
         <CardHeader className="text-center space-y-2">
+          {/* โลโก้ไอคอน */}
           <div className="mx-auto w-12 h-12 bg-primary rounded-xl flex items-center justify-center mb-4">
             <LogIn className="h-6 w-6 text-primary-foreground" />
           </div>
@@ -135,7 +157,7 @@ export default function SignInClient() {
             className="space-y-4"
             noValidate
           >
-            {/* identifier */}
+            {/* USERNAME / EMAIL */}
             <div className="space-y-2">
               <Label htmlFor="identifier">ชื่อผู้ใช้</Label>
               <Input
@@ -157,7 +179,7 @@ export default function SignInClient() {
               )}
             </div>
 
-            {/* password */}
+            {/* PASSWORD */}
             <div className="space-y-2">
               <Label htmlFor="password">รหัสผ่าน</Label>
               <div className="relative">
@@ -176,6 +198,7 @@ export default function SignInClient() {
                     (errors.password ? "border-destructive " : "") + "pr-10"
                   }
                 />
+                {/* ปุ่ม toggle password */}
                 <Button
                   type="button"
                   variant="ghost"
@@ -199,8 +222,9 @@ export default function SignInClient() {
               )}
             </div>
 
-            {/* remember + forgot */}
+            {/* REMEMBER & FORGOT */}
             <div className="flex items-center justify-between">
+              {/* Checkbox */}
               <Controller
                 name="remember"
                 control={control}
@@ -216,8 +240,7 @@ export default function SignInClient() {
                   </label>
                 )}
               />
-
-              {/* ✅ ใช้ Dialog ลืมรหัสผ่าน (สองขั้นตอน) */}
+              {/* Forgot Password Dialog */}
               <ForgotPasswordDialog
                 asChild
                 trigger={
@@ -232,6 +255,7 @@ export default function SignInClient() {
               />
             </div>
 
+            {/* SUBMIT */}
             <Button
               type="submit"
               className="w-full gradient-primary"
@@ -244,6 +268,7 @@ export default function SignInClient() {
               )}
             </Button>
 
+            {/* REGISTER LINK */}
             <div className="mt-6 text-center text-sm">
               <span className="text-muted-foreground">ยังไม่มีบัญชี? </span>
               <Link

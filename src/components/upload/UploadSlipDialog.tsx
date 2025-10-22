@@ -1,56 +1,5 @@
-// // src/components/upload/UploadSlipDialog.tsx
-
-// "use client";
-
-// import * as React from "react";
-// import {
-//   Dialog,
-//   DialogContent,
-//   DialogHeader,
-//   DialogTitle,
-//   DialogTrigger,
-// } from "@/components/ui/dialog";
-// import UploadImage from "./UploadImage";
-
-// interface UploadSlipDialogProps {
-//   open?: boolean;
-//   onOpenChange?: (open: boolean) => void;
-//   onSuccess?: () => void;
-//   children: React.ReactNode;
-// }
-
-// export function UploadSlipDialog({
-//   open,
-//   onOpenChange,
-//   onSuccess,
-//   children,
-// }: UploadSlipDialogProps) {
-//   const [internalOpen, setInternalOpen] = React.useState(false);
-//   const controlled = open !== undefined;
-//   const isOpen = controlled ? open : internalOpen;
-//   const setOpen = controlled ? onOpenChange : setInternalOpen;
-
-//   const handleSuccess = React.useCallback(() => {
-//     setOpen?.(false);
-//     onSuccess?.(); // ให้ parent จัดการ reload/refresh ตามต้องการ
-//   }, [setOpen, onSuccess]);
-
-//   return (
-//     <Dialog open={isOpen} onOpenChange={setOpen}>
-//       <DialogTrigger asChild>{children}</DialogTrigger>
-//       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-//         <DialogHeader>
-//           <DialogTitle className="text-xl">เพิ่มรายการธุรกรรม</DialogTitle>
-//         </DialogHeader>
-//         <div className="mt-4">
-//           <UploadImage onSuccess={handleSuccess} />
-//         </div>
-//       </DialogContent>
-//     </Dialog>
-//   );
-// }
-
 // components/upload/UploadSlipDialog.tsx
+
 "use client";
 import * as React from "react";
 import { useRouter } from "next/navigation";
@@ -63,45 +12,65 @@ import {
 } from "@/components/ui/dialog";
 import UploadImage from "./UploadImage";
 
+type UploadSlipDialogProps = {
+  open?: boolean;
+  onOpenChange?: (o: boolean) => void;
+  onSuccess?: () => void;
+  /** ปิด dialog อัตโนมัติหลังสำเร็จ (default: true) */
+  closeOnSuccess?: boolean;
+  /** ปรับหัวข้อ/คำอธิบายได้ */
+  title?: string;
+  description?: string;
+  children: React.ReactNode;
+};
+
 export function UploadSlipDialog({
   open,
   onOpenChange,
   onSuccess,
+  closeOnSuccess = true,
+  title = "เพิ่มรายการธุรกรรม",
+  description,
   children,
-}: {
-  open?: boolean;
-  onOpenChange?: (o: boolean) => void;
-  onSuccess?: () => void;
-  children: React.ReactNode;
-}) {
-  const [internalOpen, setInternalOpen] = React.useState(false);
+}: UploadSlipDialogProps) {
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
   const isControlled = open !== undefined;
-  const currentOpen = isControlled ? open : internalOpen;
-  const setCurrentOpen = isControlled ? onOpenChange : setInternalOpen;
+  const actualOpen = isControlled ? open : uncontrolledOpen;
+  const setOpen = React.useCallback(
+    (o: boolean) => (isControlled ? onOpenChange?.(o) : setUncontrolledOpen(o)),
+    [isControlled, onOpenChange]
+  );
+
   const router = useRouter();
 
   const handleSuccess = React.useCallback(() => {
-    // // แจ้งทุกหน้า client ว่ามีการเปลี่ยนธุรกรรม
-    // if (typeof window !== "undefined") {
-    //   window.dispatchEvent(
-    //     new CustomEvent("mp:transactions:changed", {
-    //       detail: { reason: "upload" },
-    //     })
-    //   );
-    // }
-    // รีเฟรช data ฝั่ง App Router (SSR parts, เช่น dashboard/transaction/reports)
+    // ✅ แจ้งทุกหน้า client (SWR) ว่ามีการเปลี่ยนธุรกรรม
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("mp:transactions:changed", {
+          detail: { reason: "upload" },
+        })
+      );
+    }
+
+    // ✅ รีเฟรชฝั่ง App Router (server components)
     router.refresh();
-    setCurrentOpen?.(false);
+
+    if (closeOnSuccess) setOpen(false);
     onSuccess?.();
-  }, [router, setCurrentOpen, onSuccess]);
+  }, [router, setOpen, closeOnSuccess, onSuccess]);
 
   return (
-    <Dialog open={currentOpen} onOpenChange={setCurrentOpen}>
+    <Dialog open={actualOpen} onOpenChange={setOpen}>
       <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-xl">เพิ่มรายการธุรกรรม</DialogTitle>
+          <DialogTitle className="text-xl">{title}</DialogTitle>
+          {description ? (
+            <p className="text-sm text-muted-foreground">{description}</p>
+          ) : null}
         </DialogHeader>
+
         <div className="mt-4">
           <UploadImage onSuccess={handleSuccess} />
         </div>

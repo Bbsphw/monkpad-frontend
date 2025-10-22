@@ -1,101 +1,3 @@
-// // src/app/(protected)/layout.tsx
-// import { ReactNode } from "react";
-// import { cookies } from "next/headers";
-// import { redirect } from "next/navigation";
-
-// import { AppSidebar } from "@/components/dashboard/app-sidebar";
-// import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-// import { SiteHeaderDashboard } from "@/components/dashboard/site-header";
-// import { env } from "@/lib/env";
-
-// type Profile = { id: number; username: string; email: string };
-
-// // ถอด avatar initials
-// function avatarFrom(username: string) {
-//   const seed = encodeURIComponent(username || "user");
-//   return `https://api.dicebear.com/7.x/initials/svg?seed=${seed}`;
-// }
-
-// // ถอด JWT payload แบบไม่ verify (พอใช้เพื่ออ่าน uid/sub)
-// function decodeJwt<T = any>(token: string): T | null {
-//   try {
-//     const [, payload] = token.split(".");
-//     if (!payload) return null;
-//     // base64url → base64
-//     const b64 = payload.replace(/-/g, "+").replace(/_/g, "/");
-//     const json = Buffer.from(b64, "base64").toString("utf8");
-//     return JSON.parse(json) as T;
-//   } catch {
-//     return null;
-//   }
-// }
-
-// export default async function ProtectedLayout({
-//   children,
-// }: {
-//   children: ReactNode;
-// }) {
-//   // 1) ต้องมี mp_token
-//   const cookieStore = await cookies();
-//   const token = cookieStore.get("mp_token")?.value;
-//   if (!token) redirect("/sign-in?next=/dashboard");
-
-//   // 2) ถอด uid จาก JWT (payload คาดว่า { sub: string, uid: number })
-//   const payload = decodeJwt<{ sub?: string; uid?: number }>(token);
-//   const uid = payload?.uid;
-//   if (!uid) {
-//     // token ไม่มี uid → ถือว่าใช้ไม่ได้
-//     redirect("/sign-in?next=/dashboard");
-//   }
-
-//   // 3) เรียกโปรไฟล์ด้วย /users/{uid} แทน /users/me (บางระบบ /me ตอบ 422)
-//   let profile: Profile | null = null;
-//   try {
-//     const res = await fetch(`${env.API_BASE_URL}/users/${uid}`, {
-//       method: "GET",
-//       cache: "no-store",
-//       headers: {
-//         Authorization: `Bearer ${token}`,
-//         Accept: "application/json",
-//       },
-//     });
-
-//     if (!res.ok) {
-//       // 401/403/404/422 → กลับหน้า sign-in
-//       redirect("/sign-in?next=/dashboard");
-//     }
-
-//     profile = (await res.json()) as Profile;
-//   } catch {
-//     redirect("/sign-in?next=/dashboard");
-//   }
-
-//   const user = {
-//     name: profile!.username,
-//     email: profile!.email,
-//     avatar: avatarFrom(profile!.username),
-//   };
-
-//   return (
-//     <SidebarProvider
-//       style={
-//         {
-//           "--sidebar-width": "calc(var(--spacing) * 72)",
-//           "--header-height": "calc(var(--spacing) * 12)",
-//         } as React.CSSProperties
-//       }
-//     >
-//       <AppSidebar user={user} />
-//       <SidebarInset>
-//         <SiteHeaderDashboard />
-//         <main className="flex flex-1 flex-col p-4 md:p-6 gap-6">
-//           {children}
-//         </main>
-//       </SidebarInset>
-//     </SidebarProvider>
-//   );
-// }
-
 // src/app/(protected)/layout.tsx
 
 import type { ReactNode } from "react";
@@ -106,11 +8,33 @@ import { AppSidebar } from "@/components/navbar/app-sidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { SiteHeaderDashboard } from "@/components/navbar/site-header";
 
+/**
+ * avatarFrom
+ * ----------
+ * ยูทิลเล็ก ๆ สำหรับสร้าง URL รูป avatar (placeholder) จาก username
+ * - ใช้ dicebear initials → ไม่ต้องเก็บไฟล์รูป
+ * - encodeURIComponent เผื่อมีอักขระพิเศษ
+ */
 function avatarFrom(username: string) {
   const seed = encodeURIComponent(username || "user");
   return `https://api.dicebear.com/7.x/initials/svg?seed=${seed}`;
 }
 
+/**
+ * ProtectedLayout (Server Component)
+ * ----------------------------------
+ * หน้าครอบทุกเพจในโซน (protected)
+ *
+ * Responsibilities:
+ * 1) ตรวจ auth ฝั่ง server ตั้งแต่ชั้น layout → ป้องกันการ flash/แอบเห็น UI
+ * 2) ตั้งค่า SWR (global) ให้ทุก client component ใช้ค่ามาตรฐานเดียวกัน
+ * 3) จัดวาง Shell หลัก (Sidebar + Header + main) ด้วย SidebarProvider
+ *
+ * Notes:
+ * - ใช้ server component เพื่อให้ redirect ทำงานแบบ HTTP-first บน Edge/Node
+ * - ถ้า getProfile() ล้มเหลว → redirect ไป /sign-in พร้อม next=/dashboard
+ * - เลือก set keepPreviousData เพื่อให้ผิว UI ลื่นเมื่อเปลี่ยน key ของ SWR
+ */
 export default async function ProtectedLayout({
   children,
 }: {
@@ -118,11 +42,14 @@ export default async function ProtectedLayout({
 }) {
   let profile;
   try {
+    // 🔒 Server-side guard: ถ้าหา profile ไม่เจอ/หมดอายุ → throw และ redirect
     profile = await getProfile();
   } catch {
+    // ❗️สำคัญ: redirect ใน server จะ short-circuit การเรนเดอร์ → ไม่เกิด flash
     redirect("/sign-in?next=/dashboard");
   }
 
+  // 🧑‍💼 map ข้อมูล user สำหรับ Sidebar/Nav (ไม่ต้องส่ง token ออก client)
   const user = {
     name: profile.username,
     email: profile.email,
@@ -130,26 +57,42 @@ export default async function ProtectedLayout({
   };
 
   return (
+    // 🌐 Global SWR config: ควบคุมพฤติกรรม fetch ของทุก useSWR() ใต้ layout นี้
     <SWRConfig
       value={{
+        // ลดการยิงซ้ำใน dev/strict mode และช่วงสลับ tab
         dedupingInterval: 5000,
+        // UX: ไม่ revalidate อัตโนมัติเมื่อโฟกัสหน้าต่าง/เน็ตต่อใหม่ (เราควบคุมเอง)
         revalidateOnFocus: false,
         revalidateOnReconnect: false,
+        // UX: คงค่าเดิมไว้ระหว่างกำลังโหลดข้อมูลใหม่ → ลดจังหวะ “กะพริบ”
         keepPreviousData: true,
       }}
     >
+      {/* 🧱 Shell Provider: ให้คอมโพเนนต์ sidebar อ่าน/ควบคุมสถานะเปิด-ปิดได้ */}
       <SidebarProvider
+        // 🎨 ส่ง CSS variables แบบ inline เพื่อปรับ layout ได้กลางระบบ
         style={
           {
-            "--sidebar-width": "calc(var(--spacing) * 72)",
-            "--header-height": "calc(var(--spacing) * 12)",
+            "--sidebar-width": "calc(var(--spacing) * 72)", // ~ กว้าง ~18rem ถ้าค่า spacing = 4px
+            "--header-height": "calc(var(--spacing) * 12)", // ~ สูง ~3rem
           } as React.CSSProperties
         }
       >
+        {/* 🧭 ซ้าย: App Sidebar (รับ user object เพื่อแสดงโปรไฟล์/เมนู) */}
         <AppSidebar user={user} />
+
+        {/* 📐 ขวา: เนื้อหา + Header */}
         <SidebarInset>
+          {/* 🔝 Header ส่วนบนของทุกหน้าภายใต้ protected (มีปุ่ม upload, ชื่อหน้า, ฯลฯ) */}
           <SiteHeaderDashboard />
-          <main className="flex flex-1 flex-col p-4 md:p-6 gap-6">
+
+          {/* 📄 พื้นที่เนื้อหาเพจย่อย (children) */}
+          <main
+            className="flex flex-1 flex-col p-4 md:p-6 gap-6"
+            // a11y: landmark region สำหรับ content หลัก
+            role="main"
+          >
             {children}
           </main>
         </SidebarInset>

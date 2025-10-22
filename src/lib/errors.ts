@@ -1,8 +1,11 @@
+// src/lib/errors.ts
+
 /**
- * Centralized error utilities for API Route handlers and server utilities.
- * - ApiError class hierarchy (BadRequest, Unauthorized, etc.)
- * - handleRouteError: convert thrown errors into consistent JSON responses
- * - extractZodMessage: safely extract validation error messages from ZodError
+ * 🔧 Centralized error utilities สำหรับ API Route handlers และ server utilities.
+ * จุดประสงค์หลัก:
+ * - รวม class สำหรับ API Error (เช่น 400, 401, 403, 404, 409, 422)
+ * - มี helper สำหรับแปลง error → JSON Response ที่เป็นมาตรฐาน
+ * - มีตัวช่วย extract ข้อความจาก ZodError (เวลาตรวจ validate body)
  */
 
 import { ZodError } from "zod";
@@ -11,6 +14,12 @@ import { ZodError } from "zod";
 /*                            Custom API Error Classes                        */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * 🌟 Base class สำหรับ error ที่มี HTTP status + code
+ * - `status`: HTTP Status code (เช่น 400, 401)
+ * - `code`: optional code สำหรับระบุประเภทเฉพาะ เช่น "USER_NOT_FOUND"
+ * - `cause`: ใช้เก็บ error เดิมไว้ debug ภายหลังได้
+ */
 export class ApiError extends Error {
   status: number;
   code?: string | number;
@@ -28,6 +37,11 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * ⚠️ กลุ่ม subclass แต่ละตัวแทน HTTP error มาตรฐาน:
+ * - ใช้งานใน route handler เช่น throw new BadRequestError("missing field")
+ * - ทุกตัวสืบทอดจาก ApiError
+ */
 export class BadRequestError extends ApiError {
   constructor(
     message = "Bad Request",
@@ -87,7 +101,15 @@ export class UnprocessableEntityError extends ApiError {
 /* -------------------------------------------------------------------------- */
 
 /**
- * สร้าง Response JSON มาตรฐาน error
+ * 🧱 jsonError()
+ * ใช้สร้าง Response JSON มาตรฐานฝั่ง error
+ * รูปแบบ:
+ * ```json
+ * {
+ *   "ok": false,
+ *   "error": { "message": "...", "code": "..." }
+ * }
+ * ```
  */
 export function jsonError(
   status: number,
@@ -102,7 +124,13 @@ export function jsonError(
 }
 
 /**
- * สร้าง Response JSON มาตรฐาน success
+ * ✅ jsonOk()
+ * ใช้สร้าง Response JSON มาตรฐานฝั่ง success
+ * รูปแบบ:
+ * ```json
+ * { "ok": true, "data": { ... }, "meta": { ... } }
+ * ```
+ * meta จะเพิ่มเฉพาะเมื่อมีค่า (ใช้สำหรับ pagination/list)
  */
 export function jsonOk<T>(
   data: T,
@@ -120,7 +148,21 @@ export function jsonOk<T>(
 /* -------------------------------------------------------------------------- */
 
 /**
- * ใช้ใน try/catch ของ Route Handler
+ * 🧩 handleRouteError()
+ * ใช้ใน try/catch ของ Route Handler (API Routes)
+ * - ถ้าเป็น ApiError → แปลงเป็น jsonError(status, message)
+ * - ถ้าเป็น error ทั่วไป → log แล้วตอบ 500 Internal Server Error
+ *
+ * Example:
+ * ```ts
+ * export async function POST(req: Request) {
+ *   try {
+ *     ...
+ *   } catch (e) {
+ *     return handleRouteError(e);
+ *   }
+ * }
+ * ```
  */
 export function handleRouteError(err: unknown): Response {
   if (err instanceof ApiError) {
@@ -133,7 +175,14 @@ export function handleRouteError(err: unknown): Response {
 }
 
 /**
- * ตัวช่วย assert (throw 400)
+ * 🧭 assert()
+ * ช่วยเช็กเงื่อนไขและโยน BadRequestError อัตโนมัติ
+ * ใช้คล้าย assert ของ node แต่ตอบกลับเป็น error มาตรฐานของ API
+ *
+ * Example:
+ * ```ts
+ * assert(userId, "User ID required")
+ * ```
  */
 export function assert(
   condition: unknown,
@@ -147,9 +196,12 @@ export function assert(
 /* -------------------------------------------------------------------------- */
 
 /**
- * ดึงข้อความจาก ZodError โดยปลอดภัย (ใช้แทน e.errors)
- * - ใช้ได้กับ Zod v3.23+ ที่เปลี่ยน property เป็น e.issues
- * - รองรับ flatten() อัตโนมัติถ้ามีข้อความใน formErrors
+ * 🧩 extractZodMessage()
+ * ดึงข้อความ error ที่ “อ่านง่าย” ที่สุดจาก ZodError
+ * รองรับ:
+ * - ZodError.flatten() → formErrors[0]
+ * - ถ้าไม่มี → ดึง message แรกจาก issues
+ * - fallback → "Invalid request body"
  */
 export function extractZodMessage(e: ZodError): string {
   if (typeof e.flatten === "function") {
@@ -164,7 +216,9 @@ export function extractZodMessage(e: ZodError): string {
 }
 
 /**
- * ตัวช่วยแปลง ZodError → JSON Response 422
+ * 🎯 handleZodError()
+ * แปลง ZodError → Response 422 (Unprocessable Entity)
+ * ใช้เมื่อ validate body/query แล้วไม่ผ่าน
  */
 export function handleZodError(e: ZodError): Response {
   const message = extractZodMessage(e);

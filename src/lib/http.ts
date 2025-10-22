@@ -1,12 +1,14 @@
+// src/lib/http.ts
+
 import { env } from "./env";
 import { cookies as nextCookies, headers as nextHeaders } from "next/headers";
 
 /**
- * Server-first JSON fetcher for Route Handlers / Server Actions
- * - Prepends env.API_BASE_URL (resolved from BACKEND_API_BASE_URL on server)
- * - Auto JSON headers
- * - Auto-attach Authorization from cookie "mp_token" (server)
- * - Unified error throwing
+ * 🧰 fetchJSON (server-first)
+ * ใช้ได้ทั้งฝั่ง server / client:
+ * - ถ้าฝั่ง server → แนบ Authorization จาก cookie ให้อัตโนมัติ (ถ้าไม่สั่ง noAuth)
+ * - auto set JSON headers
+ * - build URL ด้วย API_BASE_URL (ยกเว้น absolute)
  */
 
 type JsonInit = Omit<RequestInit, "body" | "headers"> & {
@@ -15,10 +17,10 @@ type JsonInit = Omit<RequestInit, "body" | "headers"> & {
 };
 
 type FetchOpts = {
-  authToken?: string | null;
-  noAuth?: boolean;
-  extraHeaders?: Record<string, string>;
-  absolute?: boolean;
+  authToken?: string | null; // override token (แทนที่ cookie)
+  noAuth?: boolean; // ไม่ต้องแนบ auth header
+  extraHeaders?: Record<string, string>; // header เพิ่มเติม
+  absolute?: boolean; // treat 'path' เป็น absolute (ไม่ prepend base)
 };
 
 function isServer() {
@@ -33,6 +35,7 @@ function resolveUrl(path: string, absolute?: boolean) {
 }
 
 async function readAuthTokenFromCookie(): Promise<string | null> {
+  // อ่าน token จาก cookie เฉพาะบน server เท่านั้น
   if (!isServer()) return null;
   try {
     const cookieStore = await nextCookies();
@@ -43,6 +46,7 @@ async function readAuthTokenFromCookie(): Promise<string | null> {
   }
 }
 
+// ดึง header จาก request ที่เข้ามา เพื่อ forward ต่อไปได้ (เช่น x-request-id)
 export async function forwardableHeaders(
   keys: string[] = ["x-request-id", "accept-language"]
 ) {
@@ -67,6 +71,7 @@ export async function fetchJSON<T = unknown>(
 ): Promise<T> {
   const url = resolveUrl(path, opts.absolute);
 
+  // base headers
   const baseHeaders = new Headers();
   baseHeaders.set("accept", "application/json");
 
@@ -79,11 +84,13 @@ export async function fetchJSON<T = unknown>(
 
   if (isJsonBody) baseHeaders.set("content-type", "application/json");
 
+  // รวม headers: base → init.headers
   const mergedHeaders = new Headers(init.headers ?? {});
   for (const [k, v] of baseHeaders.entries()) {
     if (!mergedHeaders.has(k)) mergedHeaders.set(k, v);
   }
 
+  // แนบ Authorization เว้นแต่สั่ง noAuth
   if (!opts.noAuth) {
     const cookieToken = await readAuthTokenFromCookie();
     const token = opts.authToken ?? cookieToken;
@@ -92,6 +99,7 @@ export async function fetchJSON<T = unknown>(
     }
   }
 
+  // extra headers (เช่น forwarded headers)
   if (opts.extraHeaders) {
     for (const [k, v] of Object.entries(opts.extraHeaders)) {
       mergedHeaders.set(k, v);
@@ -108,6 +116,7 @@ export async function fetchJSON<T = unknown>(
     cache: "no-store",
   });
 
+  // ตรวจ content-type เพื่อตีความผลลัพธ์/รวมข้อความ error
   const contentType = res.headers.get("content-type") || "";
   const isJsonResponse = contentType.includes("application/json");
 
@@ -129,6 +138,7 @@ export async function fetchJSON<T = unknown>(
   }
 
   if (!isJsonResponse) {
+    // ปล่อยเป็น text เมื่อไม่ใช่ JSON (ดาวน์โหลดไฟล์/ข้อความ)
     return (await res.text()) as unknown as T;
   }
   return (await res.json()) as T;

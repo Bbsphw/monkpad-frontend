@@ -11,14 +11,16 @@ export async function fetchJSONClient<T = unknown>(
   path: string,
   init: JsonInit = {}
 ): Promise<T> {
-  // สำหรับ client ให้ยิงไปที่ internal API เช่น /api/dashboard/...
-  // ถ้าส่ง URL เป็น absolute ก็ใช้ตามนั้น
+  // ฝั่ง Client: อนุญาตทั้ง relative (/api/...) และ absolute (http/https)
+  // - ใช้ relative เพื่อพก cookie อัตโนมัติ (credentialed)
   const url =
-    path.startsWith("http://") || path.startsWith("https://") ? path : path; // ปล่อยให้เป็น relative (/api/...) จะพก cookie ให้เอง
+    path.startsWith("http://") || path.startsWith("https://") ? path : path;
 
+  // ใส่ accept: application/json ไว้ก่อน
   const headers = new Headers(init.headers);
   headers.set("accept", "application/json");
 
+  // ตรวจสภาพ body → ถ้าเป็น object (ไม่ใช่ FormData/Blob/ArrayBuffer) ค่อยแปะ content-type
   const isJsonBody =
     init.body &&
     typeof init.body === "object" &&
@@ -32,10 +34,11 @@ export async function fetchJSONClient<T = unknown>(
     ...init,
     headers,
     body: isJsonBody ? JSON.stringify(init.body) : (init.body as any),
-    credentials: "include",
-    cache: "no-store",
+    credentials: "include", // ให้ส่ง cookie ไปด้วย (สำคัญเวลาคุยกับ /api/*)
+    cache: "no-store", // ไม่ cached
   });
 
+  // รวม error message จาก body ถ้าทำได้ → โยน Error เดียวกันให้ผู้ใช้ไปจัดการ
   if (!res.ok) {
     let msg = res.statusText;
     try {
@@ -44,6 +47,8 @@ export async function fetchJSONClient<T = unknown>(
     } catch {}
     throw new Error(`Request ${res.status}: ${msg}`);
   }
+
+  // ตอบกลับเป็น JSON ถ้า content-type เป็น JSON, ไม่งั้นเป็น text
   const ct = res.headers.get("content-type") || "";
   return (ct.includes("application/json") ? res.json() : res.text()) as any;
 }

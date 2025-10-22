@@ -1,4 +1,5 @@
 // src/components/dashboard/nav-main.tsx
+
 "use client";
 
 import * as React from "react";
@@ -14,7 +15,7 @@ import {
 } from "@/components/ui/sidebar";
 import { UploadSlipDialog } from "@/components/upload/UploadSlipDialog";
 
-// ---- Types ----
+/* ---------- Types ---------- */
 type BaseItem = {
   title: string;
   icon?: LucideIcon;
@@ -23,11 +24,11 @@ type BaseItem = {
 type LinkItem = BaseItem & {
   kind: "link";
   url: string;
-  /** exact match (default: false = startsWith) */
+  /** ต้องตรงเป๊ะหรือเริ่มต้นด้วยเส้นทาง (default: startsWith) */
   exact?: boolean;
-  /** next/link prefetch (default: false) */
+  /** next/link prefetch (default: false เพื่อควบคุมแบนด์วิดท์) */
   prefetch?: boolean;
-  /** open new tab */
+  /** เปิดแท็บใหม่/ภายนอก */
   external?: boolean;
 };
 
@@ -39,15 +40,17 @@ type ActionItem = BaseItem & {
 
 export type NavItem = LinkItem | ActionItem;
 
-// ---- Component ----
+/** เมนูหลักภายใน Sidebar: รองรับทั้งลิงก์และ action (เช่น เปิดอัปโหลดสลิป) */
 export function NavMain({ items }: { items: NavItem[] }) {
   const pathname = usePathname();
 
+  /** ตรวจ active state ของลิงก์จาก pathname ปัจจุบัน */
   const isActive = React.useCallback(
     (item: NavItem) => {
       if (item.kind !== "link") return false;
       const { url, exact } = item;
       if (exact) return pathname === url;
+      // active เมื่ออยู่ที่ path เดียวกันหรืออยู่ใต้ path นั้น
       return pathname === url || pathname.startsWith(url + "/");
     },
     [pathname]
@@ -60,7 +63,7 @@ export function NavMain({ items }: { items: NavItem[] }) {
           {items.map((item) => {
             const Icon = item.icon;
 
-            // ----- Action item -----
+            /* ---------- Action item (เช่น เปิด dialog) ---------- */
             if (item.kind === "action") {
               return (
                 <SidebarMenuItem key={item.title}>
@@ -74,9 +77,10 @@ export function NavMain({ items }: { items: NavItem[] }) {
               );
             }
 
-            // ----- Link item -----
+            /* ---------- Link item ---------- */
             const active = isActive(item);
 
+            // ลิงก์ภายนอก: ใช้ <a> ปกติ + target=_blank
             if (item.external) {
               return (
                 <SidebarMenuItem key={item.url}>
@@ -99,6 +103,7 @@ export function NavMain({ items }: { items: NavItem[] }) {
               );
             }
 
+            // ลิงก์ภายใน: next/link + aria-current เพื่อ A11y
             return (
               <SidebarMenuItem key={item.url}>
                 <SidebarMenuButton
@@ -108,7 +113,7 @@ export function NavMain({ items }: { items: NavItem[] }) {
                 >
                   <Link
                     href={item.url}
-                    prefetch={item.prefetch ?? false} // ← default: false
+                    prefetch={item.prefetch ?? false} // ปิด prefetch โดยดีฟอลต์
                     aria-current={active ? "page" : undefined}
                   >
                     {Icon ? <Icon /> : null}

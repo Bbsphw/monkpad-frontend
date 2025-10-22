@@ -1,72 +1,3 @@
-// // src/app/(protected)/dashboard/_services/dashboard-service.ts
-
-// import { fetchJSONClient } from "@/lib/http-client";
-// import type {
-//   SummaryPayload,
-//   CategoryRow,
-//   TrafficPoint,
-//   RecentRow,
-// } from "../_types/dashboard";
-
-// /** สรุป KPI เดือนปัจจุบัน/ที่เลือก */
-// export async function getDashboardSummary(params: {
-//   // filter จัดการหน้า dashboard เองดีกว่าเพราะดึง fetchJSONClient จาก backend มันช้าและสิ้นเปลืองการโหลดข้อมูล
-//   year: number;
-//   month: number;
-// }) {
-//   const { year, month } = params;
-//   const res = await fetchJSONClient<{ data: SummaryPayload }>(
-//     "/api/dashboard/summary?" +
-//       new URLSearchParams({
-//         year: String(year),
-//         month: String(month),
-//       }).toString()
-//   );
-//   return res.data;
-// }
-
-// /** หมวดหมู่รายจ่าย/รายรับ ของเดือนนั้น */
-// export async function getDashboardCategories(params: {
-//   year: number;
-//   month: number;
-//   type?: "income" | "expense";
-// }) {
-//   const { year, month, type = "expense" } = params;
-//   const res = await fetchJSONClient<{ data: CategoryRow[] }>(
-//     "/api/dashboard/categories?" +
-//       new URLSearchParams({
-//         year: String(year),
-//         month: String(month),
-//         type,
-//       }).toString()
-//   );
-//   return res.data ?? [];
-// }
-
-// /** เทรนด์รายเดือน (12 เดือน/ทั้งปี) */
-// export async function getDashboardTraffic(params: { year: number }) {
-//   // filter จัดการหน้า dashboard เองดีกว่าเพราะดึง fetchJSONClient จาก backend มันช้าและสิ้นเปลืองการโหลดข้อมูล
-//   const { year } = params;
-//   const res = await fetchJSONClient<{ data: TrafficPoint[] }>(
-//     "/api/reports/monthly?" +
-//       new URLSearchParams({
-//         year: String(year),
-//       }).toString()
-//   );
-//   return res.data ?? [];
-// }
-
-// /** รายการล่าสุด (limit เริ่มต้น = 10) */
-// export async function getDashboardRecent(limit = 10) {
-//   const res = await fetchJSONClient<{ data: RecentRow[] }>(
-//     "/api/dashboard/recent?" +
-//       new URLSearchParams({
-//         limit: String(limit),
-//       }).toString()
-//   );
-//   return res.data ?? [];
-// }
-
 // src/app/(protected)/dashboard/_services/dashboard-service.ts
 
 import { fetchJSONClient } from "@/lib/http-client";
@@ -78,39 +9,64 @@ import type {
   CategoryRow,
 } from "../_types/dashboard";
 
-/** รูปร่าง Tx จาก backend */
+/**
+ * TxDTO:
+ * รูปร่างธุรกรรมดิบที่ได้จาก backend (API aggregation)
+ * - บางฟิลด์ซ้ำซ้อน (value | amount, tag | category) → ฝั่ง derive จะ normalize เอง
+ * - date: ISO string (สมมติ backend validate แล้ว)
+ */
 export type TxDTO = {
   id: number | string;
   tag_id?: number;
-  value?: number;
-  amount?: number;
-  date: string;
-  time?: string;
+  value?: number; // บาง API ส่ง value
+  amount?: number; // บาง API ส่ง amount
+  date: string; // YYYY-MM-DD (หรือ ISO date ที่ parse ได้)
+  time?: string; // HH:MM (optional)
   type: "income" | "expense";
-  tag?: string;
-  category?: string;
+  tag?: string; // เลเบลหมวดหมู่จากระบบ tag
+  category?: string; // ชื่อหมวดหมู่กรณี legacy/back-compat
   note?: string;
 };
+
+/**
+ * รูปแบบ response ที่ route /api/dashboard/categories อาจส่งกลับมา
+ * - บางเวอร์ชันส่ง {transactions: TxDTO[], categories: CategoryRow[]}
+ * - บางเวอร์ชันส่งเฉพาะ CategoryRow[] (legacy)
+ * - จึงต้องเขียน type ให้รองรับได้กว้าง (any fallback)
+ */
 type CategoriesAPIResponse =
   | {
       ok: true;
       data: {
         transactions?: TxDTO[];
         categories?: CategoryRow[];
-        legacy?: CategoryRow[];
+        legacy?: CategoryRow[]; // รองรับเคสเก่า
       };
     }
   | { ok: true; data: CategoryRow[] }
   | any;
 
-/* utilities */
+/* ───────────────────────────── Utilities ───────────────────────────── */
+
+/** ตรวจว่า date ISO อยู่เดือน/ปีเดียวกันหรือไม่ (ใช้กรุ๊ป per-month) */
 const sameMonth = (dISO: string, y: number, m: number) => {
   const d = new Date(dISO);
   return d.getFullYear() === y && d.getMonth() + 1 === m;
 };
+
+/** แปลง unknown → number แบบปลอดภัย (NaN → 0) */
 const asAmount = (n: unknown) => (Number.isFinite(Number(n)) ? Number(n) : 0);
 
-/* ---------- derive utilities ---------- */
+/* ───────────────────────────── Derive Functions ─────────────────────────────
+ * ฟังก์ชันด้านล่าง “คำนวณ/สรุปผล” จากรายการธุรกรรมดิบ (TxDTO[])
+ * ข้อดี:
+ *  - เลเยอร์ derive แยกจาก fetcher → ทดสอบง่าย/แคชง่าย/เปลี่ยนกติกาธุรกิจง่าย
+ *  - ทุกตัว pure function → deterministic / ไม่มี side-effect
+ *  - รองรับค่า value/amount และ tag/category ที่อาจมากับ API แตกต่างกัน
+ *  - ระวังคีย์เวลา: amount เป็น “จำนวนบวก” เสมอ, sign แยกที่ type
+ */
+
+/** สรุปยอดรายรับ/รายจ่าย/คงเหลือ ในเดือน/ปีที่ระบุ */
 export function buildSummary(txs: TxDTO[], y: number, m: number) {
   let income = 0,
     expense = 0;
@@ -123,6 +79,12 @@ export function buildSummary(txs: TxDTO[], y: number, m: number) {
   return { year: y, month: m, income, expense, balance: income - expense };
 }
 
+/**
+ * สร้าง series รายเดือนทั้งปี (12 จุด) → ใช้กับกราฟ “รายเดือน”
+ * - month: MM/YY (เช่น "01/25")
+ * - income/expense: sum ของเดือนนั้น
+ * หมายเหตุ: ไม่ normalize day → ใช้ month index จาก Date.getMonth()
+ */
 export function buildMonthlyTraffic(txs: TxDTO[], y: number) {
   const buckets = Array.from({ length: 12 }, (_, i) => ({
     month: `${String(i + 1).padStart(2, "0")}/${String(y).slice(-2)}`,
@@ -140,6 +102,10 @@ export function buildMonthlyTraffic(txs: TxDTO[], y: number) {
   return buckets;
 }
 
+/**
+ * แปลง TrafficPoint (month: MM/YY) → TrafficAreaPoint (date: YYYY-MM-01)
+ * เพื่อให้กราฟ AreaChart ใช้แกน X เป็นวันที่แบบ ISO-friendly สม่ำเสมอ
+ */
 export const toAreaSeries = (tp: TrafficPoint[], y: number) =>
   tp.map((p) => {
     const [mm] = p.month.split("/");
@@ -150,6 +116,12 @@ export const toAreaSeries = (tp: TrafficPoint[], y: number) =>
     };
   });
 
+/**
+ * จัด “รายการล่าสุด” (เรียงใหม่ล่าสุดก่อน) และ normalize ฟิลด์โชว์ในตาราง
+ * - category: ใช้ t.tag ก่อน ถ้าไม่มี fallback ที่ t.category
+ * - amount : asAmount(value ?? amount)
+ * - time    optional → ฝั่ง UI แสดงถ้ามี
+ */
 export function buildRecent(txs: TxDTO[]) {
   const sorted = [...txs].sort((a, b) =>
     `${b.date} ${b.time ?? ""}`.localeCompare(`${a.date} ${a.time ?? ""}`)
@@ -165,6 +137,12 @@ export function buildRecent(txs: TxDTO[]) {
   }));
 }
 
+/**
+ * สร้าง series ของโดนัทหมวดหมู่ (ใช้กับรายรับหรือรายจ่าย)
+ * - กรองเฉพาะเดือน/ปีที่ระบุ และ type ที่สนใจ (default = expense)
+ * - aggregate ด้วย Map เพื่อความเร็ว O(n)
+ * - คืนค่าเป็น array ที่เรียงจาก “ยอดมาก → น้อย”
+ */
 export function buildCategorySeries(
   txs: TxDTO[],
   y: number,
@@ -175,7 +153,7 @@ export function buildCategorySeries(
   for (const t of txs) {
     if (t.type !== type) continue;
     if (!sameMonth(t.date, y, m)) continue;
-    const key = t.tag ?? t.category ?? "อื่น ๆ";
+    const key = t.tag ?? t.category ?? "อื่น ๆ"; // fallback ป้องกัน empty label
     agg.set(key, (agg.get(key) ?? 0) + asAmount(t.value ?? t.amount));
   }
   return [...agg.entries()]
@@ -183,18 +161,25 @@ export function buildCategorySeries(
     .sort((a, b) => b.expense - a.expense);
 }
 
+/** นับจำนวนธุรกรรมในเดือน/ปีที่ระบุ (ใช้แสดง Stat “txCount”) */
 export function countMonthlyTx(txs: TxDTO[], y: number, m: number) {
   return txs.filter((t) => sameMonth(t.date, y, m)).length;
 }
 
-/* ---------- (คงไว้) getDashboardAll: ใช้ในที่อื่นได้ ---------- */
+/* ───────────────────────────── API Orchestrator ─────────────────────────────
+ * getDashboardAll:
+ * - ดึงข้อมูลรวมจาก route เดียว แล้ว “derive ทุกอย่าง” ในครั้งเดียว
+ * - ข้อดี: ลดจำนวน request และให้หน้าจอทุกจุด sync จาก source เดียวกัน
+ * - Fallback: กรณี backend ยังไม่ส่ง transactions → ใช้ categories Raw (legacy)
+ */
 export async function getDashboardAll(params: {
   year: number;
   month: number;
-  categoryType?: "income" | "expense";
+  categoryType?: "income" | "expense"; // หมวดที่ใช้วาดโดนัท
 }) {
   const { year, month, categoryType = "expense" } = params;
 
+  // 1) เรียก API เดียว ที่รวมข้อมูลจำเป็น
   const res = await fetchJSONClient<CategoriesAPIResponse>(
     "/api/dashboard/categories?" +
       new URLSearchParams({
@@ -204,10 +189,15 @@ export async function getDashboardAll(params: {
       }).toString()
   );
 
+  // 2) ปรับ payload ให้เป็นรูปแบบเดียว (รองรับ data wrapper หรือไม่ก็ได้)
   const payload = (res as any)?.data ?? res;
+
+  // transactions อาจไม่มี (กรณี fallback เดิม)
   const txs: TxDTO[] = Array.isArray(payload?.transactions)
     ? payload.transactions
     : [];
+
+  // categoriesRaw ใช้เฉพาะ fallback
   const categoriesRaw: CategoryRow[] = Array.isArray(payload?.categories)
     ? payload.categories
     : Array.isArray(payload?.legacy)
@@ -216,6 +206,7 @@ export async function getDashboardAll(params: {
     ? payload
     : [];
 
+  // 3) กรณีมี transactions → derive ทุกอย่างจาก txs (แหล่งความจริงตัวเดียว)
   if (txs.length > 0) {
     const summary = buildSummary(txs, year, month);
     const trafficMonthly = buildMonthlyTraffic(txs, year);
@@ -234,9 +225,11 @@ export async function getDashboardAll(params: {
     };
   }
 
-  // fallback ถ้า backend ยังไม่ส่ง transactions
+  // 4) Fallback: ไม่มี txs → ใช้ categoriesRaw เป็นหลัก (รองรับระบบเดิม)
   const categories = categoriesRaw;
   const totalExpense = categories.reduce((s, c) => s + (c.expense || 0), 0);
+
+  // หมายเหตุ: ที่นี่ไม่รู้ยอด income จาก fallback → กำหนด income = 0
   const summary: SummaryPayload = {
     year,
     month,
@@ -244,14 +237,15 @@ export async function getDashboardAll(params: {
     expense: totalExpense,
     balance: -totalExpense,
   };
-  const txCount = 0; // ✅ เพิ่ม fallback
+
+  const txCount = 0; // ไม่มีข้อมูล tx → ตั้ง 0
 
   return {
     summary,
     categories,
-    trafficMonthly: [],
-    trafficArea: [],
-    recent: [],
+    trafficMonthly: [] as TrafficPoint[], // ไม่มีข้อมูล series
+    trafficArea: [] as TrafficAreaPoint[], // ไม่มีข้อมูล series
+    recent: [] as RecentRow[], // ไม่มีข้อมูลตาราง
     txCount,
   };
 }

@@ -28,11 +28,22 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { MonthlyPoint } from "../_types/reports";
 
-/* ----------------------------- types ----------------------------- */
+/* ──────────────────────────────── Types ──────────────────────────────── */
+/**
+ * View: ตัวเลือกมุมมองข้อมูลในกราฟ
+ *  - both: แสดงรายรับ + รายจ่ายพร้อมกัน
+ *  - income: แสดงเฉพาะรายรับ
+ *  - expense: แสดงเฉพาะรายจ่าย
+ *
+ * Range: จำนวนเดือนย้อนหลังที่ต้องการแสดง (ใช้ใน filter)
+ *  - 12m, 6m, 3m
+ */
 type View = "both" | "income" | "expense";
 type Range = "12m" | "6m" | "3m";
 
-/* ----------------------------- utils ----------------------------- */
+/* ──────────────────────────────── Utils ──────────────────────────────── */
+
+/** ชื่อเดือนย่อแบบไทย (ใช้ map กับข้อมูลเดือนที่มาจาก backend) */
 const TH_MONTH_SHORT = [
   "ม.ค.",
   "ก.พ.",
@@ -48,6 +59,7 @@ const TH_MONTH_SHORT = [
   "ธ.ค.",
 ];
 
+/** ย่อค่าตัวเลขให้สั้น เช่น 12.3k / 1.2M */
 function formatShort(n: number) {
   const abs = Math.abs(n);
   if (abs >= 1_000_000)
@@ -56,24 +68,32 @@ function formatShort(n: number) {
   return n.toLocaleString("th-TH");
 }
 
+/** แปลง Range → จำนวนเดือนจริง */
 const rangeToMonths = (r: Range) => (r === "12m" ? 12 : r === "6m" ? 6 : 3);
 
+/**
+ * แปลง label เดือนให้เป็นภาษาไทย:
+ *  รองรับทั้งรูปแบบ "01/25", "2025-01", หรือ "Jan"/"January"
+ */
 function parseThaiMonthLabel(raw: string): string {
   if (!raw) return "-";
   const clean = raw.trim();
 
+  // รูปแบบ "01/25" หรือ "1-25"
   const matchDMY = clean.match(/^(\d{1,2})[\/\-](\d{2,4})$/);
   if (matchDMY) {
     const m = parseInt(matchDMY[1], 10);
     return TH_MONTH_SHORT[m - 1] ?? clean;
   }
 
+  // รูปแบบ ISO "2025-01"
   const matchISO = clean.match(/^(\d{4})[\/\-](\d{1,2})$/);
   if (matchISO) {
     const m = parseInt(matchISO[2], 10);
     return TH_MONTH_SHORT[m - 1] ?? clean;
   }
 
+  // แปลงชื่อเดือนอังกฤษ → ไทย
   const engToTh: Record<string, string> = {
     jan: "ม.ค.",
     feb: "ก.พ.",
@@ -94,7 +114,20 @@ function parseThaiMonthLabel(raw: string): string {
   return found ? found[1] : clean;
 }
 
-/* ---------------------------- component --------------------------- */
+/* ─────────────────────────────── Component ─────────────────────────────── */
+
+/**
+ * ColumnBarChart
+ * ───────────────────────────────────────────────
+ * แสดงกราฟแท่งแนวตั้งของรายรับ/รายจ่ายรายเดือน
+ * ใช้ในหน้า “รายงาน (Reports)” เพื่อสรุปแนวโน้มเดือนต่อเดือน
+ *
+ * Features:
+ *  ✅ เลือกช่วงเวลา (12 / 6 / 3 เดือน)
+ *  ✅ เลือกเดือนสิ้นสุด
+ *  ✅ Toggle รายรับ / รายจ่าย / ทั้งหมด
+ *  ✅ Loading skeleton / error / empty state ครบ
+ */
 export function ColumnBarChart({
   series,
   loading,
@@ -104,7 +137,7 @@ export function ColumnBarChart({
   defaultRange = "12m",
   defaultView = "both",
 }: {
-  series: MonthlyPoint[] | undefined;
+  series: MonthlyPoint[] | undefined; // [{ month, income, expense }]
   loading?: boolean;
   error?: boolean;
   emptyHint?: string;
@@ -112,6 +145,8 @@ export function ColumnBarChart({
   defaultRange?: Range;
   defaultView?: View;
 }) {
+  /* ─────────────── Normalize ข้อมูลต้นทาง ─────────────── */
+  // กรองเฉพาะข้อมูลที่มี month ถูกต้อง
   const ordered = React.useMemo(
     () =>
       Array.isArray(series)
@@ -122,21 +157,27 @@ export function ColumnBarChart({
     [series]
   );
 
+  /* ─────────────── State ─────────────── */
   const [view, setView] = React.useState<View>(defaultView);
   const [range, setRange] = React.useState<Range>(defaultRange);
   const [endIndex, setEndIndex] = React.useState<number>(
     Math.max(0, ordered.length - 1)
   );
 
+  // reset endIndex เมื่อข้อมูลใหม่เข้ามา
   React.useEffect(() => {
     setEndIndex(Math.max(0, ordered.length - 1));
   }, [ordered.length]);
 
+  /* ─────────────── คำนวณข้อมูลที่จะนำมาแสดง ─────────────── */
   const data = React.useMemo(() => {
     if (!ordered.length) return [];
+
     const n = rangeToMonths(range);
     const end = Math.min(endIndex, ordered.length - 1);
     const start = Math.max(0, end - (n - 1));
+
+    // slice เฉพาะช่วงเดือนที่เลือก + แปลงชื่อเดือน
     return ordered.slice(start, end + 1).map((d) => ({
       month: parseThaiMonthLabel(d.month),
       income: view === "expense" ? 0 : d.income,
@@ -147,6 +188,7 @@ export function ColumnBarChart({
   const hasIncome = data.some((r) => (r.income ?? 0) > 0);
   const hasExpense = data.some((r) => (r.expense ?? 0) > 0);
 
+  /* ─────────────── Loading / Error / Empty ─────────────── */
   if (loading) return <Skeleton className="w-full" style={{ height }} />;
   if (error)
     return (
@@ -155,10 +197,13 @@ export function ColumnBarChart({
   if (!data.length)
     return <div className="text-sm text-muted-foreground">{emptyHint}</div>;
 
+  /* ─────────────── Rendering ─────────────── */
   return (
     <div className="flex w-full flex-col" style={{ height }}>
+      {/* ─── Controls ด้านบน ─── */}
       <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
+          {/* ตัวเลือกช่วงเวลา (Range) */}
           <Select value={range} onValueChange={(v: Range) => setRange(v)}>
             <SelectTrigger className="h-8 w-[140px]" aria-label="เลือกช่วงเวลา">
               <SelectValue placeholder="ช่วงเวลา" />
@@ -170,6 +215,7 @@ export function ColumnBarChart({
             </SelectContent>
           </Select>
 
+          {/* ตัวเลือกเดือนสิ้นสุด (endIndex mapping → month) */}
           <Select
             value={String(endIndex)}
             onValueChange={(v) => setEndIndex(Number(v))}
@@ -193,6 +239,7 @@ export function ColumnBarChart({
           </Select>
         </div>
 
+        {/* Toggle มุมมองข้อมูล */}
         <ToggleGroup
           type="single"
           value={view}
@@ -206,9 +253,11 @@ export function ColumnBarChart({
         </ToggleGroup>
       </div>
 
+      {/* ─── กราฟ ─── */}
       <div className="grow">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} barGap={6} barCategoryGap={10}>
+            {/* Gradient Fill สำหรับสีแท่ง */}
             <defs>
               <linearGradient id="m-income" x1="0" y1="0" x2="0" y2="1">
                 <stop
@@ -236,6 +285,7 @@ export function ColumnBarChart({
               </linearGradient>
             </defs>
 
+            {/* กริด / แกน X / แกน Y */}
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis
               dataKey="month"
@@ -251,6 +301,8 @@ export function ColumnBarChart({
               width={52}
               tickFormatter={(v: number) => formatShort(v)}
             />
+
+            {/* Tooltip และ Legend */}
             <Tooltip
               cursor={{ stroke: "hsl(var(--border))", strokeDasharray: 4 }}
               content={
@@ -264,6 +316,7 @@ export function ColumnBarChart({
               wrapperStyle={{ paddingBottom: 6 }}
             />
 
+            {/* Bar สำหรับรายรับ/รายจ่าย */}
             {hasIncome && (
               <Bar
                 dataKey="income"

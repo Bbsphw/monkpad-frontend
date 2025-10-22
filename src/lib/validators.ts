@@ -1,13 +1,17 @@
+// src/lib/validators.ts
+
 import { z } from "zod";
 
-// Sign-in: รองรับทั้งอีเมลหรือยูสเซอร์เนมในฟิลด์เดียวชื่อ identifier
+/* ------------------------------- Sign-in ------------------------------- */
+// รองรับ username หรือ email ในฟิลด์เดียว (identifier)
 export const signInSchema = z.object({
-  identifier: z.string().min(1, "กรุณากรอกอีเมลหรือชื่อผู้ใช้"),
+  identifier: z.string().min(1, "กรุณากรอกชื่อผู้ใช้"),
   password: z.string().min(1, "กรุณากรอกรหัสผ่าน"),
 });
 export type SignInFormData = z.infer<typeof signInSchema>;
 
-// Sign-up + ยืนยันรหัสผ่าน
+/* ------------------------------- Sign-up ------------------------------- */
+// รวมเงื่อนไขความแข็งแรงของรหัสผ่าน + confirm password
 export const signUpSchema = z
   .object({
     username: z.string().min(3, "ชื่อผู้ใช้ยาวอย่างน้อย 3 ตัว"),
@@ -26,7 +30,7 @@ export const signUpSchema = z
   });
 export type SignUpFormData = z.infer<typeof signUpSchema>;
 
-// เปลี่ยนรหัสผ่าน
+/* ---------------------------- Change password --------------------------- */
 export const changePasswordSchema = z
   .object({
     currentPassword: z.string().min(8, "รหัสผ่านเดิมอย่างน้อย 8 ตัวอักษร"),
@@ -44,14 +48,14 @@ export const changePasswordSchema = z
   });
 export type ChangePasswordForm = z.infer<typeof changePasswordSchema>;
 
-// เปลี่ยนอีเมล
+/* ------------------------------ Change email ---------------------------- */
 export const changeEmailSchema = z.object({
   newEmail: z.string().email("อีเมลไม่ถูกต้อง"),
   password: z.string().min(8, "รหัสผ่านอย่างน้อย 8 ตัวอักษร"),
 });
 export type ChangeEmailForm = z.infer<typeof changeEmailSchema>;
 
-// เปลี่ยนชื่อผู้ใช้
+/* ---------------------------- Change username --------------------------- */
 export const changeUsernameSchema = z.object({
   newUsername: z
     .string()
@@ -62,13 +66,14 @@ export const changeUsernameSchema = z.object({
 });
 export type ChangeUsernameForm = z.infer<typeof changeUsernameSchema>;
 
-// ลืมรหัสผ่าน
+/* ---------------------------- Forgot password --------------------------- */
 export const forgotPasswordSchema = z.object({
   email: z.string().email("อีเมลไม่ถูกต้อง"),
 });
 export type ForgotPasswordForm = z.infer<typeof forgotPasswordSchema>;
 
-// รีเซ็ตรหัสผ่าน
+/* ----------------------------- Reset password --------------------------- */
+// รวมกฏรหัสผ่าน + confirm + code 6 หลัก
 export const resetPasswordSchema = z
   .object({
     email: z.string().email("อีเมลไม่ถูกต้อง"),

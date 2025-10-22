@@ -7,16 +7,22 @@ import { decodeJwt } from "@/lib/jwt";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * DELETE /api/tags/delete/:tagId
+ * - ลบแท็กของผู้ใช้ (ฝั่ง BE จะเช็กสิทธิ์ตาม uid ให้)
+ * - ถ้าแท็กเป็น default ฝั่ง FE ควรป้องกันก่อนกดลบ (ทำแล้วใน UI)
+ */
 export async function DELETE(
   _req: Request,
   ctx: { params: Promise<{ tagId: string }> }
 ) {
   try {
+    // ---- อ่านพารามิเตอร์ path และ validate ----
     const { tagId } = await ctx.params;
     const id = Number(tagId);
     if (!id) return jsonError(422, "Invalid tag id");
 
-    // อ่าน token จากคุกกี้ + ถอด uid โดยตรง
+    // ---- auth: token + uid ----
     const cookieStore = await cookies();
     const token = cookieStore.get("mp_token")?.value || "";
     if (!token) return jsonError(401, "Not authenticated");
@@ -25,7 +31,8 @@ export async function DELETE(
     const uid = payload?.uid;
     if (!uid) return jsonError(401, "Not authenticated");
 
-    // ยิง backend พร้อม Authorization (require_user บังคับ)
+    // ---- upstream: ส่งคำสั่งลบ ----
+    // เส้นทาง BE: /tags/delete/{user_id}/{tag_id}
     const upstream = await fetch(
       `${env.API_BASE_URL}/tags/delete/${uid}/${id}`,
       {
@@ -47,6 +54,7 @@ export async function DELETE(
       return jsonError(upstream.status, msg);
     }
 
+    // ---- สำเร็จ ----
     return Response.json({ ok: true, data: js });
   } catch (e) {
     return handleRouteError(e);

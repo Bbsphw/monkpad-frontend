@@ -1,7 +1,18 @@
-// components/site-footer.tsx
+// src/components/site/site-footer.tsx
+
 import Link from "next/link";
 import SiteLogo from "./site-logo";
 
+/**
+ * Footer ส่วนล่างของไซต์:
+ * - แบรนด์ + คำอธิบายย่อ
+ * - ลิงก์นโยบาย/ข้อกำหนด/ติดต่อ
+ * - ลิขสิทธิ์พร้อมปีแสดงผล (รองรับช่วงปี เช่น 2024-2026)
+ *
+ * หมายเหตุ:
+ * - ใช้ role="contentinfo" บน <footer> เหมาะสมแล้ว
+ * - <time dateTime> ใช้เป็นปีปัจจุบันเพื่อถูกต้องตามสเปค
+ */
 export default function SiteFooter() {
   const startYear = 2024;
   const thisYear = new Date().getFullYear();
@@ -12,12 +23,12 @@ export default function SiteFooter() {
     <footer role="contentinfo" className="border-t bg-card">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="mx-auto max-w-7xl text-center">
-          {/* Brand */}
+          {/* Brand — ใช้ Link ห่อ SiteLogo (SiteLogo ควรไม่ render <a> ซ้ำ) */}
           <Link
             href="/"
             className="mb-4 inline-flex items-center justify-center gap-2"
             prefetch={false}
-            aria-label="ไปหน้าแรก MonkPad" // ใส่ได้ถ้า Wordmark ซ่อน; ถ้าโชว์ Wordmark จะไม่จำเป็น
+            aria-label="ไปหน้าแรก MonkPad"
           >
             <SiteLogo href={null} />
           </Link>
@@ -62,6 +73,7 @@ export default function SiteFooter() {
             </ul>
           </nav>
 
+          {/* ลิขสิทธิ์ */}
           <div className="mt-6 border-t pt-6">
             <p className="text-sm text-muted-foreground">
               © <time dateTime={`${thisYear}`}>{yearText}</time> MonkPad.

@@ -1,4 +1,5 @@
 // src/components/auth/forgot-password-dialog.tsx
+
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -25,6 +26,10 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 
+/** ค่าคงที่ด้าน UX
+ * - COOLDOWN_SEC: กัน spam การกดส่งรหัสซ้ำ
+ * - OTP_TTL_MINUTES: แสดง TTL ให้ผู้ใช้ทราบ (สื่อสารอย่างโปร่งใส)
+ */
 const COOLDOWN_SEC = 60;
 const OTP_TTL_MINUTES = 10; // แสดงข้อมูลให้ผู้ใช้ทราบ
 
@@ -35,15 +40,24 @@ export function ForgotPasswordDialog({
 }: {
   asChild?: boolean;
   trigger: React.ReactNode;
+  /** อีเมลตั้งต้นที่ดึงมาจากฟอร์ม sign-in (ถ้ารูปแบบถูกต้อง) เพื่อเติมให้ผู้ใช้ */
   presetEmail?: string;
 }) {
+  /** open: ควบคุม state ของ Dialog จากภายใน (controlled) เพื่อ reset state ได้เมื่อปิด */
   const [open, setOpen] = useState(false);
+  /** step: สลับสองหน้าจอ (ขอรหัส → ยืนยัน/ตั้งรหัสใหม่) โดยไม่ต้องเรนเดอร์ component แยก */
   const [step, setStep] = useState<"request" | "verify">("request");
+  /** email: เก็บค่าอีเมลที่ใช้ใน flow ทั้งสอง step ให้สอดคล้องกัน */
   const [email, setEmail] = useState(presetEmail ?? "");
+  /** cooldown: ตัวนับถอยหลังสำหรับปุ่ม “ส่งรหัสอีกครั้ง” */
   const [cooldown, setCooldown] = useState(0);
+  /** timer: เก็บ interval id ไว้ clear เองเมื่อ dialog ปิด/ครบเวลา (เลี่ยง memory leak) */
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Step 1: request
+  /* ───────────────── Step 1: request form ─────────────────
+   * แยก useForm ต่อ step ชัดเจน → type-safe + isolate validation
+   * ใช้ zodResolver เพื่อ enforce schema ฝั่ง client (ฝั่ง server ตรวจอีกชั้น)
+   */
   const {
     register: registerReq,
     handleSubmit: handleSubmitReq,
@@ -56,7 +70,9 @@ export function ForgotPasswordDialog({
     defaultValues: { email: presetEmail ?? "" },
   });
 
-  // Step 2: verify/reset
+  /* ───────────────── Step 2: verify/reset form ─────────────────
+   * แยก state ของฟอร์ม verify ออกจาก request เพื่อไม่ให้ field/dirty state รบกวนกัน
+   */
   const {
     register: registerVer,
     handleSubmit: handleSubmitVer,
@@ -74,13 +90,19 @@ export function ForgotPasswordDialog({
     },
   });
 
+  /** เมื่อ presetEmail เปลี่ยน (เช่น ผู้ใช้พิมพ์ในหน้า sign-in แล้วกดลืมรหัสผ่าน)
+   * → sync ค่าให้ทั้งสองฟอร์ม + state กลาง (email)
+   */
   useEffect(() => {
     setReqValue("email", presetEmail ?? "");
     setVerValue("email", presetEmail ?? "");
     setEmail(presetEmail ?? "");
   }, [presetEmail, setReqValue, setVerValue]);
 
-  // cooldown
+  /** คุมอายุของ interval ด้วย state cooldown:
+   * - เมื่อ cooldown หมด → clear interval ทิ้ง
+   * - ป้องกัน interval ซ้อน
+   */
   useEffect(() => {
     if (cooldown <= 0 && timer.current) {
       clearInterval(timer.current);
@@ -88,6 +110,10 @@ export function ForgotPasswordDialog({
     }
   }, [cooldown]);
 
+  /** เริ่มนับ cooldown ใหม่ทุกครั้งที่ส่งรหัส
+   * - ใช้ setInterval + setState แบบ functional เพื่อความถูกต้องของค่าล่าสุด
+   * - เก็บ/ล้าง interval ใน ref ป้องกันการสร้างซ้อน/ลืม clear
+   */
   const startCooldown = (sec: number) => {
     setCooldown(sec);
     if (timer.current) clearInterval(timer.current);
@@ -103,9 +129,16 @@ export function ForgotPasswordDialog({
     }, 1000);
   };
 
+  /** ปุ่มส่งรหัสซ้ำจะกดได้เฉพาะเมื่อ cooldown หมด */
   const canResend = cooldown === 0;
 
-  // Step 1: ส่งอีเมล OTP
+  /* ───────────────── Handlers ───────────────── */
+
+  /** Step 1: ส่งอีเมล OTP
+   * - normalize อีเมลให้เป็น lower-case
+   * - สื่อสารผลลัพธ์ผ่าน toast
+   * - เปลี่ยน step → verify และเริ่ม cooldown
+   */
   const onRequestOTP = async (values: ForgotPasswordForm) => {
     const e = values.email.trim().toLowerCase();
     try {
@@ -124,12 +157,15 @@ export function ForgotPasswordDialog({
         return;
       }
 
+      // sync ค่า email ไปทั้งสองฟอร์ม + state กลาง
       setEmail(e);
       setReqValue("email", e);
       setVerValue("email", e);
+
       toast.success("ส่งรหัสยืนยันแล้ว", {
         description: `รหัสหมดอายุใน ${OTP_TTL_MINUTES} นาที`,
       });
+
       setStep("verify");
       startCooldown(COOLDOWN_SEC);
     } catch (err: any) {
@@ -137,7 +173,10 @@ export function ForgotPasswordDialog({
     }
   };
 
-  // Step 2: ยืนยันโค้ด + ตั้งรหัสใหม่
+  /** Step 2: ยืนยันโค้ด + ตั้งรหัสใหม่
+   * - ส่งค่าไป backend ทั้งก้อน (email, code, newPassword, confirmNewPassword)
+   * - สำเร็จ: รีเซ็ตทั้งสองฟอร์ม + ปิด dialog + กลับไปหน้า request
+   */
   const onVerifyReset = async (values: ResetPasswordForm) => {
     try {
       const res = await fetch("/api/password/reset", {
@@ -157,7 +196,8 @@ export function ForgotPasswordDialog({
       toast.success("ตั้งรหัสผ่านใหม่สำเร็จ", {
         description: "โปรดเข้าสู่ระบบด้วยรหัสใหม่ของคุณ",
       });
-      // เคลียร์ฟอร์มและปิด dialog
+
+      // เคลียร์สถานะทุกอย่างให้เหมือนเปิด dialog ใหม่
       resetReq();
       resetVer();
       setStep("request");
@@ -167,6 +207,7 @@ export function ForgotPasswordDialog({
     }
   };
 
+  /** ชื่อเรื่อง/คำอธิบายใน Dialog อิงตาม step เพื่อ UX ที่ชัดเจน */
   const title = useMemo(
     () => (step === "request" ? "ลืมรหัสผ่าน" : "ยืนยันรหัส & ตั้งรหัสใหม่"),
     [step]
@@ -179,6 +220,10 @@ export function ForgotPasswordDialog({
     [step, email]
   );
 
+  /** ปุ่มส่งรหัสซ้ำ:
+   * - เคารพ cooldown
+   * - ใช้ email ปัจจุบันที่ยืนยันแล้วใน state
+   */
   const resend = async () => {
     if (!canResend) return;
     const e = email.trim().toLowerCase();
@@ -192,22 +237,25 @@ export function ForgotPasswordDialog({
       onOpenChange={(o) => {
         setOpen(o);
         if (!o) {
-          // reset state
+          // เมื่อปิด dialog → เคลียร์ state ภายใน + timer ให้เรียบร้อย
           setStep("request");
           setCooldown(0);
           if (timer.current) clearInterval(timer.current);
         }
       }}
     >
+      {/* asChild: ให้ parent เป็นตัวกำหนด element จริงของ trigger (ยืดหยุ่นเรื่อง semantics) */}
       <DialogTrigger asChild={asChild}>{trigger}</DialogTrigger>
 
       <DialogContent>
         <DialogHeader>
+          {/* การตั้ง Title/Description ช่วยด้าน A11y ของ Dialog */}
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
         {step === "request" ? (
+          /* ───────── Step 1: ฟอร์มขอรหัส ───────── */
           <form onSubmit={handleSubmitReq(onRequestOTP)} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="fp-email">อีเมล</Label>
@@ -226,7 +274,9 @@ export function ForgotPasswordDialog({
             </DialogFooter>
           </form>
         ) : (
+          /* ───────── Step 2: ฟอร์มยืนยัน/ตั้งรหัส ───────── */
           <form onSubmit={handleSubmitVer(onVerifyReset)} className="space-y-4">
+            {/* email: disable เพื่อกัน user แก้ระหว่างขั้นตอน (source of truth อยู่ใน state) */}
             <div className="space-y-2">
               <Label htmlFor="rv-email">อีเมล</Label>
               <Input
@@ -280,6 +330,7 @@ export function ForgotPasswordDialog({
               )}
             </div>
 
+            {/* แถบล่าง: ปุ่มส่งรหัสอีกครั้ง + แจ้ง TTL → ช่วยลดความสับสนของผู้ใช้ */}
             <div className="flex items-center justify-between">
               <Button
                 type="button"

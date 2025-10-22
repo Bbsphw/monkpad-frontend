@@ -1,10 +1,14 @@
 // src/app/(auth)/sign-up/page.tsx
+
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import SignUpClient from "./signUp-client";
 
 /**
- * Server: ถ้ามี token แล้ว และ profile ใช้ได้ → redirect /dashboard
+ * ✅ Server Component — ตรวจ token เช่นเดียวกับหน้า sign-in
+ * -------------------------------------------------------------
+ * - ถ้าพบ token ที่ยังใช้ได้ → redirect ไป /dashboard
+ * - ถ้าไม่พบ → render หน้า SignUpClient
  */
 export default async function SignUpPage() {
   const cookieStore = await cookies();
@@ -22,9 +26,7 @@ export default async function SignUpPage() {
       headers: { cookie: `mp_token=${token}` },
     }).catch(() => null);
 
-    if (res?.ok) {
-      redirect("/dashboard");
-    }
+    if (res?.ok) redirect("/dashboard");
   }
 
   return <SignUpClient />;
