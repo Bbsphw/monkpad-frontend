@@ -9,7 +9,6 @@ import {
   changePasswordSchema,
   type ChangePasswordForm,
 } from "@/lib/validators";
-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -22,6 +21,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { useRouter } from "next/navigation";
 
 export function ChangePasswordDialog({
   asChild,
@@ -32,6 +32,7 @@ export function ChangePasswordDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const router = useRouter();
 
   const {
     register,
@@ -64,6 +65,14 @@ export function ChangePasswordDialog({
       toast.success("เปลี่ยนรหัสผ่านสำเร็จ");
       reset();
       setOpen(false);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("mp:profile:changed", {
+            detail: { field: "password" },
+          })
+        );
+      }
+      router.refresh();
     } finally {
       setSubmitting(false);
     }

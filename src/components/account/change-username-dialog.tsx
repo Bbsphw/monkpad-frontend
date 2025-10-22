@@ -22,6 +22,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { useRouter } from "next/navigation";
 
 export function ChangeUsernameDialog({
   asChild,
@@ -32,6 +33,7 @@ export function ChangeUsernameDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const router = useRouter();
 
   const {
     register,
@@ -61,6 +63,15 @@ export function ChangeUsernameDialog({
       toast.success("เปลี่ยนชื่อผู้ใช้สำเร็จ");
       reset();
       setOpen(false);
+      // แจ้งและรีเฟรช layout → avatar/ชื่อที่ Sidebar อัปเดตทันที
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("mp:profile:changed", {
+            detail: { field: "username" },
+          })
+        );
+      }
+      router.refresh();
     } finally {
       setSubmitting(false);
     }

@@ -68,7 +68,7 @@ export default function TransactionExportDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger>
+      <DialogTrigger asChild>
         <Button variant="outline">Export CSV</Button>
       </DialogTrigger>
       <DialogContent>
