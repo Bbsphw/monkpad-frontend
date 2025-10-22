@@ -78,19 +78,15 @@ function ReportCardsSkeleton() {
 export default function ReportClient() {
   // ── ค่าปีและเดือนปัจจุบัน ใช้เป็น default query ──
   const today = new Date();
-  const [year, setYear] = React.useState<number>(today.getFullYear());
-  const [month, setMonth] = React.useState<number>(today.getMonth() + 1);
-  const [type] = React.useState<"income" | "expense" | "all">("all");
+  const year = today.getFullYear();
+  const month = today.getMonth() + 1;
+  const type: "income" | "expense" | "all" = "all";
 
   // ── เรียก custom hook (useReports) ──
-  // ใช้ SWR ดึงข้อมูลทั้งหมด (summary, monthlySeries, categorySeries)
-  // จะ revalidate อัตโนมัติถ้า key (year, month, type) เปลี่ยน
   const { data, loading, error } = useReports({ year, month, type });
 
-  // ── Loading state (โหลดครั้งแรก) ──
   if (loading) return <ReportSkeleton />;
 
-  // ───────────────────────────── Layout ─────────────────────────────
   return (
     <div className="p-4 md:p-6 space-y-6">
       {/* ─── Header ─── */}
@@ -105,7 +101,6 @@ export default function ReportClient() {
 
       {/* ─── Section 1: Summary + Monthly Comparison ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* สรุปยอดรวม */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">สรุปยอดรวม</CardTitle>
@@ -119,7 +114,6 @@ export default function ReportClient() {
           </CardContent>
         </Card>
 
-        {/* เปรียบเทียบรายรับ–รายจ่ายรายเดือน */}
         <Card className="lg:col-span-2">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">
@@ -159,10 +153,8 @@ export default function ReportClient() {
         </CardContent>
       </Card>
 
-      {/* ─── Footer / Error separator ─── */}
       <Separator />
 
-      {/* แสดงข้อความ error เพิ่มเติม (หากมี) */}
       {error && (
         <div className="text-sm text-destructive">
           โหลดข้อมูลรายงานไม่สำเร็จ: {String(error)}

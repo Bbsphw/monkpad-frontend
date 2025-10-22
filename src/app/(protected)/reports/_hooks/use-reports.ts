@@ -15,6 +15,7 @@ import {
   ReportQuerySchema,
   ApiPayloadSchema,
 } from "../_schemas/reports-schema";
+import type { z } from "zod"; // ✅ ใช้ z.infer เพื่ออ้าง type จาก Zod schema (ไม่ต้อง any)
 
 /* ────────────────────────────────────────────────────────────────
  * helpers (เดิมของ service)
@@ -116,7 +117,11 @@ function buildSummary(transactions: Transaction[]): ReportData["summary"] {
  * - Validate payload/shape จาก API ด้วย zod (ApiPayloadSchema)
  *   → ทำให้ส่วนที่เหลือของ UI มั่นใจใน type ได้จริง
  * ──────────────────────────────────────────────────────────────── */
-async function fetchReportBundle([key, year, month, typeAllOrOne]: [
+
+// ✅ อ้าง Type ของ response จาก Zod schema โดยตรง → ห้าม any
+type ApiPayload = z.infer<typeof ApiPayloadSchema>;
+
+async function fetchReportBundle([_key, year, month, typeAllOrOne]: [
   string,
   number,
   number,
@@ -125,21 +130,20 @@ async function fetchReportBundle([key, year, month, typeAllOrOne]: [
   // ✅ ตรวจสอบพารามิเตอร์ขาเข้าอย่างเคร่งครัด (fail fast)
   const parsed = ReportQuerySchema.parse({ year, month, type: typeAllOrOne });
 
-  // API /reports/categories ต้องการเพียง income|expense
-  // แต่ฝั่ง UI อาจเลือก "all" → ให้แมปเป็น "expense" เป็นค่า default (ตามสเปคเดิม)
+  // /api/reports/categories รองรับแค่ income|expense → map "all" เป็น "expense"
   const apiType: TxType = parsed.type === "all" ? "expense" : parsed.type;
 
-  // ประกอบ query string แบบชัดเจน (stringify ล่วงหน้า)
+  // ประกอบ query string
   const q = new URLSearchParams({
     year: String(parsed.year),
     month: String(parsed.month),
     type: apiType,
   }).toString();
 
-  // ❗ ใช้ fetchJSONClient (ห่อ fetch): รวม header/token/throw error ไว้ที่เดียว
-  const res = await fetchJSONClient<any>(`/api/reports/categories?${q}`);
+  // ✅ พิมพ์ response เป็น ApiPayload (ไม่ใช้ any)
+  const res = await fetchJSONClient<ApiPayload>(`/api/reports/categories?${q}`);
 
-  // ✅ ตรวจ payload ด้วย zod อีกชั้น (กัน backend เปลี่ยน shape โดยไม่ตั้งใจ)
+  // ✅ Validate payload อีกรอบ (กัน BE เปลี่ยน shape)
   const payload = ApiPayloadSchema.parse(res);
 
   // ── Derive ข้อมูลทั้งหมดบน client เพียงครั้งเดียว ──
@@ -188,18 +192,16 @@ export function useReports(params: {
   ];
 
   const { data, error, isLoading, mutate } = useSWR(key, fetchReportBundle, {
-    // Dev UX: กันยิงซ้ำใน StrictMode + ไม่รีเฟรชตอนสลับแท็บ
     dedupingInterval: 5000,
     revalidateOnFocus: false,
     revalidateOnReconnect: false,
-    // UX ลื่น: แสดงข้อมูลเก่าจนกว่าของใหม่จะพร้อม → กราฟไม่วูบลง
     keepPreviousData: true,
   });
 
   return {
-    data, // พร้อมใช้งานใน ReportClient
-    loading: isLoading, // ใช้แสดง skeleton
-    error: error ? (error as Error).message : null, // แปลงเป็นข้อความปลอดภัย
-    reload: () => mutate(), // ให้หน้าเรียกรีโหลดเองได้ (เช่นหลังแก้/ลบข้อมูล)
+    data,
+    loading: isLoading,
+    error: error ? (error as Error).message : null,
+    reload: () => mutate(),
   };
 }

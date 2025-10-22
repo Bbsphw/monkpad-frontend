@@ -3,7 +3,13 @@
 "use client";
 
 import * as React from "react";
-import { ArrowDownCircle, ArrowUpCircle, Receipt, Wallet } from "lucide-react";
+import {
+  ArrowDownCircle,
+  ArrowUpCircle,
+  LucideIcon,
+  Receipt,
+  Wallet,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Summary } from "../_types/reports";
 import {
@@ -43,7 +49,7 @@ const META: Record<
   {
     label: string; // ชื่อบนการ์ด
     type: "currency" | "number"; // ฟอร์แมตตัวเลข
-    Icon: React.FC<any>; // ไอคอน lucide (as component)
+    Icon: LucideIcon; // ไอคอน lucide (as component)
     bg: string; // คลาสพื้นหลัง + เส้นขอบ (รองรับ dark)
     text: string; // คลาสข้อความหลัก
     iconWrap: string; // พื้นหลัง/สีไอคอน

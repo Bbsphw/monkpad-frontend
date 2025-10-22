@@ -12,6 +12,7 @@ import type {
   TxType,
 } from "../_types/reports";
 import { fetchJSONClient } from "@/lib/http-client";
+import type { z } from "zod"; // ✅ ใช้ z.infer เพื่อดึงชนิดจาก Zod schema (เลี่ยง any)
 
 /* ──────────────────────────────────────────────
  * 🔹 Helper Functions
@@ -146,6 +147,10 @@ function buildSummary(transactions: Transaction[]): ReportData["summary"] {
  *        - monthlySeries (แนวโน้มรายเดือน)
  *        - categorySeries (หมวดรายจ่ายเดือนที่เลือก)
  * ────────────────────────────────────────────── */
+
+// ✅ อ้างชนิดผลลัพธ์จาก schema โดยตรง (เลี่ยง any)
+type ApiPayload = z.infer<typeof ApiPayloadSchema>;
+
 export async function getReports(params: {
   year: number;
   month: number;
@@ -161,8 +166,8 @@ export async function getReports(params: {
     type: parsed.type === "all" ? "expense" : parsed.type,
   });
 
-  // ✅ fetch ผ่าน wrapper (รวม baseURL + token จาก cookie)
-  const res = await fetchJSONClient<any>(`/api/reports/categories?${q}`);
+  // ✅ fetch ผ่าน wrapper: ระบุชนิดเป็น ApiPayload (ไม่ใช้ any)
+  const res = await fetchJSONClient<ApiPayload>(`/api/reports/categories?${q}`);
 
   // ✅ ตรวจ response shape อีกชั้นเพื่อป้องกัน backend mismatch
   const payload = ApiPayloadSchema.parse(res);
