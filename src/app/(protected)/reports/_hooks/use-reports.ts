@@ -15,7 +15,7 @@ import {
   ReportQuerySchema,
   ApiPayloadSchema,
 } from "../_schemas/reports-schema";
-import type { z } from "zod"; // ✅ ใช้ z.infer เพื่ออ้าง type จาก Zod schema (ไม่ต้อง any)
+import type { z } from "zod"; // ใช้ z.infer อ้าง type จาก Zod schema
 
 /* ────────────────────────────────────────────────────────────────
  * helpers (เดิมของ service)
@@ -118,35 +118,35 @@ function buildSummary(transactions: Transaction[]): ReportData["summary"] {
  *   → ทำให้ส่วนที่เหลือของ UI มั่นใจใน type ได้จริง
  * ──────────────────────────────────────────────────────────────── */
 
-// ✅ อ้าง Type ของ response จาก Zod schema โดยตรง → ห้าม any
-type ApiPayload = z.infer<typeof ApiPayloadSchema>;
+// อ้างชนิด response จาก Zod schema → ไม่ต้อง any
+type CategoriesApiResponse = z.infer<typeof ApiPayloadSchema>;
 
-async function fetchReportBundle([_key, year, month, typeAllOrOne]: [
-  string,
-  number,
-  number,
-  "all" | TxType
-]) {
-  // ✅ ตรวจสอบพารามิเตอร์ขาเข้าอย่างเคร่งครัด (fail fast)
+async function fetchReportBundle(
+  args: [string, number, number, "all" | TxType]
+) {
+  // ปลดเฉพาะค่าที่ใช้ (ไม่ต้องประกาศ _key ให้โดนเตือนว่า unused)
+  const [, year, month, typeAllOrOne] = args;
+
+  // ✅ ตรวจสอบพารามิเตอร์
   const parsed = ReportQuerySchema.parse({ year, month, type: typeAllOrOne });
 
-  // /api/reports/categories รองรับแค่ income|expense → map "all" เป็น "expense"
+  // ✅ normalize type (all → expense)
   const apiType: TxType = parsed.type === "all" ? "expense" : parsed.type;
 
-  // ประกอบ query string
+  // ✅ ประกอบ query string
   const q = new URLSearchParams({
     year: String(parsed.year),
     month: String(parsed.month),
     type: apiType,
   }).toString();
 
-  // ✅ พิมพ์ response เป็น ApiPayload (ไม่ใช้ any)
-  const res = await fetchJSONClient<ApiPayload>(`/api/reports/categories?${q}`);
-
-  // ✅ Validate payload อีกรอบ (กัน BE เปลี่ยน shape)
+  // ✅ fetch (typed) + ตรวจ payload ด้วย Zod
+  const res = await fetchJSONClient<CategoriesApiResponse>(
+    `/api/reports/categories?${q}`
+  );
   const payload = ApiPayloadSchema.parse(res);
 
-  // ── Derive ข้อมูลทั้งหมดบน client เพียงครั้งเดียว ──
+  // ✅ derive ข้อมูล
   const txs: Transaction[] = payload.data.transactions ?? [];
   const summary = buildSummary(txs);
   const monthlySeries = buildMonthlySeries(txs);
@@ -157,8 +157,7 @@ async function fetchReportBundle([_key, year, month, typeAllOrOne]: [
     apiType
   );
 
-  const data: ReportData = { summary, monthlySeries, categorySeries };
-  return data;
+  return { summary, monthlySeries, categorySeries } satisfies ReportData;
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -175,7 +174,7 @@ export function useReports(params: {
   month: number;
   type: "income" | "expense" | "all";
 }) {
-  // ป้องกัน edge case: พารามิเตอร์เสีย → fallback เป็นปี/เดือนปัจจุบัน
+  // ป้องกัน edge case: ปี/เดือนพัง → fallback เป็นวันนี้
   const valid = ReportQuerySchema.pick({ year: true, month: true }).safeParse(
     params
   );
@@ -183,7 +182,7 @@ export function useReports(params: {
   const m = valid.success ? valid.data.month : new Date().getMonth() + 1;
   const t = params.type ?? "all";
 
-  // Key แบบ tuple → SWR จะ compare แบบ shallow และ de-dupe ได้ดี
+  // Key แบบ tuple → SWR de-dupe ได้ดี
   const key: [string, number, number, "all" | TxType] = [
     "reports-bundle",
     y,
