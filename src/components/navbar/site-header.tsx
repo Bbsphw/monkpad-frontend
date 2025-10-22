@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { UploadSlipDialog } from "@/components/upload/UploadSlipDialog";
+import { useTransactionsContext } from "@/app/(protected)/transactions/_components/transaction-filters";
 
 const PAGE_TITLES: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -16,6 +17,7 @@ const PAGE_TITLES: Record<string, string> = {
 export function SiteHeaderDashboard() {
   const pathname = usePathname();
   const title = PAGE_TITLES[pathname] ?? "Dashboard";
+  // const { reload } = useTransactionsContext();
 
   return (
     <header className="flex h-(--header-height) shrink-0 items-center gap-2 border-b px-4 lg:px-6">
@@ -24,6 +26,7 @@ export function SiteHeaderDashboard() {
       <h1 className="text-lg font-semibold">{title}</h1>
       <div className="ml-auto flex items-center gap-2">
         <UploadSlipDialog>
+          {/* <UploadSlipDialog onSuccess={reload}> */}
           <Button size="sm" className="bg-primary text-primary-foreground">
             Upload Slip
           </Button>

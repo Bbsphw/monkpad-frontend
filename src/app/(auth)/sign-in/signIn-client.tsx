@@ -30,7 +30,7 @@ import { ForgotPasswordDialog } from "@/components/auth/forgot-password-dialog";
  * resolver ของ zodResolver ใช้ "input type" → เราจึงต้องตั้ง useForm เป็น z.input<typeof schema>
  */
 const signInClientSchema = z.object({
-  identifier: z.string().min(1, "กรุณากรอกอีเมลหรือชื่อผู้ใช้"),
+  identifier: z.string().min(1, "กรุณากรอกชื่อผู้ใช้"),
   password: z.string().min(1, "กรุณากรอกรหัสผ่าน"),
   remember: z.boolean().default(false),
 });
@@ -96,10 +96,9 @@ export default function SignInClient() {
       const json = await res.json().catch(() => null);
 
       if (!res.ok || !json?.ok) {
-        const msg =
-          json?.error?.message || "ชื่อผู้ใช้/อีเมล หรือรหัสผ่านไม่ถูกต้อง";
+        const msg = json?.error?.message || "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง";
         setError("identifier", {
-          message: "กรุณาตรวจสอบชื่อผู้ใช้หรืออีเมลอีกครั้ง",
+          message: "กรุณาตรวจสอบชื่อผู้ใช้อีกครั้ง",
         });
         setError("password", { message: "กรุณาตรวจสอบรหัสผ่านอีกครั้ง" });
         toast.error("เข้าสู่ระบบไม่สำเร็จ", { description: msg });
@@ -138,10 +137,10 @@ export default function SignInClient() {
           >
             {/* identifier */}
             <div className="space-y-2">
-              <Label htmlFor="identifier">อีเมลหรือชื่อผู้ใช้</Label>
+              <Label htmlFor="identifier">ชื่อผู้ใช้</Label>
               <Input
                 id="identifier"
-                placeholder="user@example.com หรือ username"
+                placeholder="username"
                 autoComplete="username"
                 {...register("identifier")}
                 onChange={(e) => {

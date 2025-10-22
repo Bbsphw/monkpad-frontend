@@ -53,6 +53,13 @@ export default function TransactionDeleteDialog({
         throw new Error(js?.error?.message || "ลบไม่สำเร็จ");
       }
       toast.success("ลบรายการสำเร็จ");
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("mp:transaction:changed", {
+            detail: { reason: "delete" },
+          })
+        );
+      }
       setOpen(false);
       reload();
     } catch (e: unknown) {
