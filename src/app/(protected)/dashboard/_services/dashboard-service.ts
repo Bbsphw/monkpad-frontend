@@ -68,6 +68,7 @@
 // }
 
 // src/app/(protected)/dashboard/_services/dashboard-service.ts
+
 import { fetchJSONClient } from "@/lib/http-client";
 import type {
   SummaryPayload,
@@ -78,13 +79,13 @@ import type {
 } from "../_types/dashboard";
 
 /** รูปร่าง Tx จาก backend */
-type TxDTO = {
+export type TxDTO = {
   id: number | string;
   tag_id?: number;
   value?: number;
   amount?: number;
-  date: string; // YYYY-MM-DD
-  time?: string; // HH:mm:ss | HH:mm
+  date: string;
+  time?: string;
   type: "income" | "expense";
   tag?: string;
   category?: string;
@@ -109,8 +110,8 @@ const sameMonth = (dISO: string, y: number, m: number) => {
 };
 const asAmount = (n: unknown) => (Number.isFinite(Number(n)) ? Number(n) : 0);
 
-/* derive */
-function buildSummary(txs: TxDTO[], y: number, m: number): SummaryPayload {
+/* ---------- derive utilities ---------- */
+export function buildSummary(txs: TxDTO[], y: number, m: number) {
   let income = 0,
     expense = 0;
   for (const t of txs) {
@@ -121,7 +122,8 @@ function buildSummary(txs: TxDTO[], y: number, m: number): SummaryPayload {
   }
   return { year: y, month: m, income, expense, balance: income - expense };
 }
-function buildMonthlyTraffic(txs: TxDTO[], y: number): TrafficPoint[] {
+
+export function buildMonthlyTraffic(txs: TxDTO[], y: number) {
   const buckets = Array.from({ length: 12 }, (_, i) => ({
     month: `${String(i + 1).padStart(2, "0")}/${String(y).slice(-2)}`,
     income: 0,
@@ -137,7 +139,8 @@ function buildMonthlyTraffic(txs: TxDTO[], y: number): TrafficPoint[] {
   }
   return buckets;
 }
-const toAreaSeries = (tp: TrafficPoint[], y: number): TrafficAreaPoint[] =>
+
+export const toAreaSeries = (tp: TrafficPoint[], y: number) =>
   tp.map((p) => {
     const [mm] = p.month.split("/");
     return {
@@ -146,11 +149,12 @@ const toAreaSeries = (tp: TrafficPoint[], y: number): TrafficAreaPoint[] =>
       expense: p.expense,
     };
   });
-function buildRecent(txs: TxDTO[]): RecentRow[] {
+
+export function buildRecent(txs: TxDTO[]) {
   const sorted = [...txs].sort((a, b) =>
     `${b.date} ${b.time ?? ""}`.localeCompare(`${a.date} ${a.time ?? ""}`)
   );
-  return sorted.slice(0).map((t) => ({
+  return sorted.map((t) => ({
     id: String(t.id),
     date: t.date,
     time: t.time,
@@ -160,12 +164,13 @@ function buildRecent(txs: TxDTO[]): RecentRow[] {
     note: t.note ?? "",
   }));
 }
-function buildCategorySeries(
+
+export function buildCategorySeries(
   txs: TxDTO[],
   y: number,
   m: number,
   type: "income" | "expense" = "expense"
-): CategoryRow[] {
+) {
   const agg = new Map<string, number>();
   for (const t of txs) {
     if (t.type !== type) continue;
@@ -178,10 +183,11 @@ function buildCategorySeries(
     .sort((a, b) => b.expense - a.expense);
 }
 
-function countMonthlyTx(txs: TxDTO[], y: number, m: number): number {
+export function countMonthlyTx(txs: TxDTO[], y: number, m: number) {
   return txs.filter((t) => sameMonth(t.date, y, m)).length;
 }
 
+/* ---------- (คงไว้) getDashboardAll: ใช้ในที่อื่นได้ ---------- */
 export async function getDashboardAll(params: {
   year: number;
   month: number;
@@ -216,7 +222,7 @@ export async function getDashboardAll(params: {
     const trafficArea = toAreaSeries(trafficMonthly, year);
     const recent = buildRecent(txs);
     const categories = buildCategorySeries(txs, year, month, categoryType);
-    const txCount = countMonthlyTx(txs, year, month); // ✅ เพิ่มบรรทัดนี้
+    const txCount = countMonthlyTx(txs, year, month);
 
     return {
       summary,

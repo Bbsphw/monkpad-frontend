@@ -447,6 +447,8 @@
 //   );
 // }
 
+// src/app/(protected)/dashboard/_components/recent-transactions-table.tsx
+
 "use client";
 
 import * as React from "react";

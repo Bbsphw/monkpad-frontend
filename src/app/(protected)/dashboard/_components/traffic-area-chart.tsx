@@ -234,6 +234,7 @@
 // }
 
 // src/app/(protected)/dashboard/_components/traffic-area-chart.tsx
+
 "use client";
 
 import * as React from "react";
