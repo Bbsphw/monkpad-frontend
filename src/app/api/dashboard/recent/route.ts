@@ -37,9 +37,14 @@ export async function GET(req: Request) {
       return jsonError(upstream.status, js?.detail || "transactions failed");
 
     // --- 4) normalize + sort ล่าสุดก่อน ---
-    const rows = Array.isArray(js?.transactions) ? js.transactions : [];
-    rows.sort((a: any, b: any) =>
-      `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`)
+    type Tx = { date?: string; time?: string; [k: string]: unknown };
+    const rows = Array.isArray(js?.transactions)
+      ? (js.transactions as Tx[])
+      : ([] as Tx[]);
+    rows.sort((a, b) =>
+      `${b.date ?? ""} ${b.time ?? ""}`.localeCompare(
+        `${a.date ?? ""} ${a.time ?? ""}`
+      )
     );
 
     // --- 5) slice ตาม limit แล้วคืนรูปแบบ unified ---

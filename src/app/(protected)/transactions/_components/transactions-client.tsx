@@ -34,14 +34,14 @@ function TableSkeleton() {
     </div>
   );
 }
-function ActionSkeleton() {
-  return (
-    <div className="flex items-center gap-2">
-      <Skeleton className="h-9 w-9" />
-      <Skeleton className="h-9 w-28" />
-    </div>
-  );
-}
+// function ActionSkeleton() {
+//   return (
+//     <div className="flex items-center gap-2">
+//       <Skeleton className="h-9 w-9" />
+//       <Skeleton className="h-9 w-28" />
+//     </div>
+//   );
+// }
 
 /* ───────────────── Dynamic imports ─────────────────
  * แยกโค้ดเป็น chunk ตามหน้าที่ (Provider/Filters/Table/Export…)
@@ -68,10 +68,10 @@ const TransactionExportDialog = dynamic(
 /* หมายเหตุ: ไฟล์นี้ไม่ได้ render TransactionDeleteDialog โดยตรง
  * แต่แยก lazy ไว้ได้ในจุดที่เรียกใช้จริง (ภายในตาราง) เพื่อไม่ block first paint
  */
-const TransactionDeleteDialog = dynamic(
-  () => import("./transaction-delete-dialog"),
-  { ssr: false, loading: () => <ActionSkeleton /> }
-);
+// const TransactionDeleteDialog = dynamic(
+//   () => import("./transaction-delete-dialog"),
+//   { ssr: false, loading: () => <ActionSkeleton /> }
+// );
 
 export default function TransactionsClient() {
   /* โครงสร้างหน้า:

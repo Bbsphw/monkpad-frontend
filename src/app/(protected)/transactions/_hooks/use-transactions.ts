@@ -19,12 +19,25 @@ async function fetchAllTx(): Promise<Transaction[]> {
 
   // map/normalize รูปร่างข้อมูลให้แน่นอน (กัน backend เปลี่ยน field ชื่อ)
   const raw = Array.isArray(js.data) ? js.data : [];
-  const mapped: Transaction[] = raw
-    .map((r: any) => {
-      const id = String(r.id ?? "");
-      const date = String(r.date ?? "").slice(0, 10); // "YYYY-MM-DD"
+  interface RawTransaction {
+    id?: string | number | null;
+    date?: string | null;
+    time?: string | null;
+    type?: string | null;
+    tag?: string | null;
+    category?: string | null;
+    value?: number | null;
+    amount?: number | null;
+    note?: string | null;
+    [key: string]: unknown;
+  }
+
+  const mapped: Transaction[] = (raw as RawTransaction[])
+    .map((r: RawTransaction) => {
+      const id: string = String(r.id ?? "");
+      const date: string = String(r.date ?? "").slice(0, 10); // "YYYY-MM-DD"
       // จำกัด type ให้เป็น union เดียวกับฝั่ง UI
-      const type =
+      const type: Transaction["type"] | null =
         r.type === "income"
           ? "income"
           : r.type === "expense"

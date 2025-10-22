@@ -85,20 +85,44 @@ const formSchema = z.object({
 type UploadImageInput = z.input<typeof formSchema>;
 type UploadImageOutput = z.output<typeof formSchema>;
 
-/* -------------------- Props -------------------- */
+/* -------------------- Types: API responses -------------------- */
+type ApiOk<T> = { ok: true; data: T };
+type ApiFail = { ok: false; error?: { message?: string } };
+type ApiResp<T> = ApiOk<T> | ApiFail;
+
+type OCRData = { amount?: number | string; date?: string; time?: string };
+type OCRResp = ApiResp<OCRData>;
+
+/* -------------------- Helpers (type-safe, no any) -------------------- */
+function getErrorMessage(err: unknown, fallback = "เกิดข้อผิดพลาด"): string {
+  if (err instanceof Error) return err.message || fallback;
+  if (typeof err === "string") return err || fallback;
+  return fallback;
+}
+
+/** แปลงค่าที่อาจเป็น Date/string/number/undefined → Date | undefined */
+function toDate(v: UploadImageInput["date"]): Date | undefined {
+  if (v instanceof Date) return v;
+  if (typeof v === "number" || typeof v === "string") {
+    const d = new Date(v);
+    return Number.isNaN(d.getTime()) ? undefined : d;
+  }
+  return undefined;
+}
+
 interface UploadImageProps {
   onSuccess?: () => void; // callback หลังบันทึกสำเร็จ (ให้ parent ปิด dialog/refresh ได้)
 }
 
 export default function UploadImage({ onSuccess }: UploadImageProps) {
   /* -------------------- Local states -------------------- */
-  const [preview, setPreview] = React.useState<string | null>(null); // URL preview ของรูปสลิป
-  const [isDragActive, setIsDragActive] = React.useState(false); // ไฮไลต์ dropzone ตอนลาก
-  const [isAddingCategory, setIsAddingCategory] = React.useState(false); // โหมดเพิ่มหมวด
-  const [newCategoryName, setNewCategoryName] = React.useState(""); // ชื่อหมวดใหม่
-  const [ocrLoading, setOcrLoading] = React.useState(false); // สถานะกำลัง OCR
-  const [deleting, setDeleting] = React.useState(false); // สถานะกำลังลบหมวด
-  const fileInputRef = React.useRef<HTMLInputElement>(null); // อ้างอิง input file เพื่อ trig ด้วยปุ่ม
+  const [preview, setPreview] = React.useState<string | null>(null);
+  const [isDragActive, setIsDragActive] = React.useState(false);
+  const [isAddingCategory, setIsAddingCategory] = React.useState(false);
+  const [newCategoryName, setNewCategoryName] = React.useState("");
+  const [ocrLoading, setOcrLoading] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // ดึง tags จาก hook กลาง (ใช้ SWR ในตัว, มี mutate สำหรับรีโหลด)
   const { tags, mutate } = useTags();
@@ -115,14 +139,15 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
   } = useForm<UploadImageInput>({
     resolver: zodResolver(formSchema),
     defaultValues: {
+      // ใช้โครง input (ก่อน transform) → จึงส่ง string/undefined ได้
       type: "expense",
       amount: "",
-      tag_id: "",
+      tag_id: "" as unknown as UploadImageInput["tag_id"], // ค่าเริ่มต้นเป็นค่าว่าง
       note: "",
-      date: new Date(),
+      date: new Date(), // รับได้เพราะ coerce.date รองรับ Date ด้วย
       time: "12:00",
     },
-    mode: "onChange", // validate บนการเปลี่ยนค่า
+    mode: "onChange",
   });
 
   // watch ค่าเพื่อแสดง/ปรับ UI
@@ -138,19 +163,21 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
 
   // เมื่อเปลี่ยน type ให้รีเซ็ต tag_id เพื่อบังคับเลือกใหม่ (ป้องกันหมวดข้าม type)
   React.useEffect(() => {
-    setValue("tag_id", "" as any, { shouldValidate: true });
+    setValue("tag_id", "" as unknown as UploadImageInput["tag_id"], {
+      shouldValidate: true,
+    });
   }, [type, setValue]);
 
   /* -------------------- File / OCR handlers -------------------- */
-  // จัดการตั้งค่าไฟล์ + สร้าง/ล้าง objectURL สำหรับ preview (อย่าลืม revoke กัน memory leak)
+  // ตั้งค่าไฟล์ + สร้าง/ล้าง objectURL สำหรับ preview (revoke กัน memory leak)
   const handleFileSelect = React.useCallback(
     (file: File | null) => {
       if (!file) {
         setPreview(null);
-        setValue("slip", undefined as any, { shouldValidate: true });
+        setValue("slip", undefined, { shouldValidate: true });
         return;
       }
-      setValue("slip", file as any, { shouldValidate: true });
+      setValue("slip", file, { shouldValidate: true });
       const url = URL.createObjectURL(file);
       setPreview((prev) => {
         if (prev) URL.revokeObjectURL(prev);
@@ -205,20 +232,35 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
       const fd = new FormData();
       fd.append("file", file);
       const res = await fetch("/api/ocr/parse", { method: "POST", body: fd });
-      const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.ok)
-        throw new Error(json?.error?.message || "OCR ไม่สำเร็จ");
 
-      const { amount, date, time } = json.data ?? {};
-      if (amount !== undefined)
-        setValue("amount", String(amount), { shouldValidate: true });
-      if (date)
-        setValue("date", new Date(date) as any, { shouldValidate: true });
-      if (time) setValue("time", time as any, { shouldValidate: true });
+      const json = (await res.json().catch(() => null)) as OCRResp | null;
+      if (!res.ok || !json || !json.ok) {
+        const msg =
+          (json && "error" in json && json.error?.message) || "OCR ไม่สำเร็จ";
+        throw new Error(msg);
+      }
+
+      const { amount: amt, date, time } = json.data ?? {};
+      if (amt !== undefined) {
+        // รับทั้ง number/string แล้ว normalize เป็น string เพื่อฟอร์ม
+        setValue("amount", String(amt), { shouldValidate: true });
+      }
+      if (date) {
+        setValue("date", new Date(date) as UploadImageInput["date"], {
+          shouldValidate: true,
+        });
+      }
+      if (time) {
+        setValue("time", time as UploadImageInput["time"], {
+          shouldValidate: true,
+        });
+      }
 
       toast.success("อ่านข้อมูลจากสลิปสำเร็จ");
-    } catch (err: any) {
-      toast.error("อ่านสลิปไม่สำเร็จ", { description: err?.message });
+    } catch (err: unknown) {
+      toast.error("อ่านสลิปไม่สำเร็จ", {
+        description: getErrorMessage(err, "เกิดข้อผิดพลาดขณะอ่านสลิป"),
+      });
     } finally {
       setOcrLoading(false);
     }
@@ -236,14 +278,23 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tag: name, type }),
       });
-      const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.ok) throw new Error(json?.error?.message);
+      const json = (await res
+        .json()
+        .catch(() => null)) as ApiResp<unknown> | null;
+      if (!res.ok || !json || !json.ok) {
+        const msg =
+          (json && "error" in json && json.error?.message) ||
+          "เพิ่มหมวดหมู่ไม่สำเร็จ";
+        throw new Error(msg);
+      }
       toast.success("เพิ่มหมวดหมู่สำเร็จ");
       setNewCategoryName("");
       setIsAddingCategory(false);
       await mutate(); // รีโหลดรายการ tags
-    } catch (err: any) {
-      toast.error("เพิ่มหมวดหมู่ไม่สำเร็จ", { description: err?.message });
+    } catch (err: unknown) {
+      toast.error("เพิ่มหมวดหมู่ไม่สำเร็จ", {
+        description: getErrorMessage(err, "เกิดข้อผิดพลาด"),
+      });
     }
   };
 
@@ -268,15 +319,25 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
       const res = await fetch(`/api/tags/delete/${tag.id}`, {
         method: "DELETE",
       });
-      const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.ok)
-        throw new Error(json?.error?.message || "ลบหมวดหมู่ไม่สำเร็จ");
+      const json = (await res
+        .json()
+        .catch(() => null)) as ApiResp<unknown> | null;
+      if (!res.ok || !json || !json.ok) {
+        const msg =
+          (json && "error" in json && json.error?.message) ||
+          "ลบหมวดหมู่ไม่สำเร็จ";
+        throw new Error(msg);
+      }
 
       toast.success("ลบหมวดหมู่สำเร็จ");
       await mutate(); // รีโหลด tags
-      setValue("tag_id", "" as any, { shouldValidate: true }); // บังคับเลือกใหม่
-    } catch (err: any) {
-      toast.error("ลบหมวดหมู่ไม่สำเร็จ", { description: err?.message });
+      setValue("tag_id", "" as unknown as UploadImageInput["tag_id"], {
+        shouldValidate: true,
+      }); // บังคับเลือกใหม่
+    } catch (err: unknown) {
+      toast.error("ลบหมวดหมู่ไม่สำเร็จ", {
+        description: getErrorMessage(err, "เกิดข้อผิดพลาด"),
+      });
     } finally {
       setDeleting(false);
     }
@@ -302,16 +363,22 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.ok)
-        throw new Error(json?.error?.message || "บันทึกรายการไม่สำเร็จ");
+      const json = (await res
+        .json()
+        .catch(() => null)) as ApiResp<unknown> | null;
+      if (!res.ok || !json || !json.ok) {
+        const msg =
+          (json && "error" in json && json.error?.message) ||
+          "บันทึกรายการไม่สำเร็จ";
+        throw new Error(msg);
+      }
 
       toast.success("บันทึกรายการสำเร็จ");
 
       // กระจาย event ส่วนกลางให้ SWR hooks ที่ฟังอยู่ (transactions) รีโหลด cache
       if (typeof window !== "undefined") {
         window.dispatchEvent(
-          new CustomEvent("mp:transactions:changed", {
+          new CustomEvent<{ reason: string }>("mp:transactions:changed", {
             detail: { reason: "upload" },
           })
         );
@@ -320,11 +387,11 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
 
       // reset ฟอร์มกลับค่าเริ่มต้น (type คงตามเดิมเพื่อความสะดวก)
       reset({
-        type: values.type,
+        type: values.type as UploadImageInput["type"],
         amount: "",
-        tag_id: "",
+        tag_id: "" as unknown as UploadImageInput["tag_id"],
         note: "",
-        date: new Date(),
+        date: new Date() as UploadImageInput["date"],
         time: "12:00",
       });
 
@@ -333,8 +400,10 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
         if (prev) URL.revokeObjectURL(prev);
         return null;
       });
-    } catch (err: any) {
-      toast.error("อัปโหลดไม่สำเร็จ", { description: err?.message });
+    } catch (err: unknown) {
+      toast.error("อัปโหลดไม่สำเร็จ", {
+        description: getErrorMessage(err, "เกิดข้อผิดพลาด"),
+      });
     }
   };
 
@@ -574,7 +643,9 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
                 render={({ field }) => (
                   <Select
                     value={field.value ? String(field.value) : ""}
-                    onValueChange={(val) => field.onChange(val)}
+                    onValueChange={(val) =>
+                      field.onChange(val as UploadImageInput["tag_id"])
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue
@@ -640,37 +711,42 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
               <Controller
                 control={control}
                 name="date"
-                render={({ field }) => (
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-full justify-start text-left font-normal",
-                          !field.value && "text-muted-foreground"
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {field.value ? (
-                          format(field.value as any as Date, "dd MMMM yyyy", {
-                            locale: th,
-                          })
-                        ) : (
-                          <span>เลือกวันที่</span>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={field.value as any as Date}
-                        onSelect={(d) => field.onChange(d as any)}
-                        initialFocus
-                        locale={th}
-                      />
-                    </PopoverContent>
-                  </Popover>
-                )}
+                render={({ field }) => {
+                  const dateVal = toDate(field.value);
+                  return (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "w-full justify-start text-left font-normal",
+                            !dateVal && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {dateVal ? (
+                            format(dateVal, "dd MMMM yyyy", { locale: th })
+                          ) : (
+                            <span>เลือกวันที่</span>
+                          )}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={dateVal}
+                          onSelect={(d) =>
+                            field.onChange(
+                              (d ?? undefined) as UploadImageInput["date"]
+                            )
+                          }
+                          initialFocus
+                          locale={th}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  );
+                }}
               />
               {errors.date && (
                 <p className="text-sm text-destructive">
@@ -729,11 +805,11 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
               onClick={() => {
                 const t = watch("type");
                 reset({
-                  type: t,
+                  type: t as UploadImageInput["type"],
                   amount: "",
-                  tag_id: "",
+                  tag_id: "" as unknown as UploadImageInput["tag_id"],
                   note: "",
-                  date: new Date(),
+                  date: new Date() as UploadImageInput["date"],
                   time: "12:00",
                 });
                 setPreview((prev) => {

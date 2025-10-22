@@ -47,7 +47,7 @@ export async function GET(req: Request) {
 
     // --- 4) pick เดือนที่ต้องการ + ใส่ default 0 ถ้าหาไม่เจอ ---
     const row = (Array.isArray(js) ? js : []).find(
-      (r: any) => Number(r.month) === month
+      (r) => Number(r.month) === month
     );
     const income = Number(row?.income ?? 0) || 0;
     const expense = Number(row?.expense ?? 0) || 0;

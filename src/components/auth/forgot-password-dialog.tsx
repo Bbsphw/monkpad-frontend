@@ -26,12 +26,24 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 
-/** ค่าคงที่ด้าน UX
+/* ───────────────────────────── UX Constants ─────────────────────────────
  * - COOLDOWN_SEC: กัน spam การกดส่งรหัสซ้ำ
  * - OTP_TTL_MINUTES: แสดง TTL ให้ผู้ใช้ทราบ (สื่อสารอย่างโปร่งใส)
  */
 const COOLDOWN_SEC = 60;
-const OTP_TTL_MINUTES = 10; // แสดงข้อมูลให้ผู้ใช้ทราบ
+const OTP_TTL_MINUTES = 10;
+
+/* ───────────────────────────── Error Utils ─────────────────────────────
+ * ดึง error message จาก unknown โดยไม่ใช้ `any`
+ */
+function getErrorMessage(err: unknown): string {
+  if (typeof err === "string") return err;
+  if (err && typeof err === "object" && "message" in err) {
+    const m = (err as { message?: unknown }).message;
+    if (typeof m === "string") return m;
+  }
+  return "เกิดข้อผิดพลาด";
+}
 
 export function ForgotPasswordDialog({
   asChild,
@@ -43,20 +55,17 @@ export function ForgotPasswordDialog({
   /** อีเมลตั้งต้นที่ดึงมาจากฟอร์ม sign-in (ถ้ารูปแบบถูกต้อง) เพื่อเติมให้ผู้ใช้ */
   presetEmail?: string;
 }) {
-  /** open: ควบคุม state ของ Dialog จากภายใน (controlled) เพื่อ reset state ได้เมื่อปิด */
+  /** คุม state ของ Dialog และ flow 2 ขั้นตอน */
   const [open, setOpen] = useState(false);
-  /** step: สลับสองหน้าจอ (ขอรหัส → ยืนยัน/ตั้งรหัสใหม่) โดยไม่ต้องเรนเดอร์ component แยก */
   const [step, setStep] = useState<"request" | "verify">("request");
-  /** email: เก็บค่าอีเมลที่ใช้ใน flow ทั้งสอง step ให้สอดคล้องกัน */
   const [email, setEmail] = useState(presetEmail ?? "");
-  /** cooldown: ตัวนับถอยหลังสำหรับปุ่ม “ส่งรหัสอีกครั้ง” */
   const [cooldown, setCooldown] = useState(0);
-  /** timer: เก็บ interval id ไว้ clear เองเมื่อ dialog ปิด/ครบเวลา (เลี่ยง memory leak) */
+
+  /** เก็บ interval id ไว้ clear เองเมื่อ dialog ปิด/ครบเวลา (เลี่ยง memory leak) */
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   /* ───────────────── Step 1: request form ─────────────────
    * แยก useForm ต่อ step ชัดเจน → type-safe + isolate validation
-   * ใช้ zodResolver เพื่อ enforce schema ฝั่ง client (ฝั่ง server ตรวจอีกชั้น)
    */
   const {
     register: registerReq,
@@ -90,19 +99,15 @@ export function ForgotPasswordDialog({
     },
   });
 
-  /** เมื่อ presetEmail เปลี่ยน (เช่น ผู้ใช้พิมพ์ในหน้า sign-in แล้วกดลืมรหัสผ่าน)
-   * → sync ค่าให้ทั้งสองฟอร์ม + state กลาง (email)
-   */
+  /** เมื่อ presetEmail เปลี่ยน → sync ค่าให้ทั้งสองฟอร์ม + state กลาง (email) */
   useEffect(() => {
-    setReqValue("email", presetEmail ?? "");
-    setVerValue("email", presetEmail ?? "");
-    setEmail(presetEmail ?? "");
+    const e = presetEmail ?? "";
+    setReqValue("email", e);
+    setVerValue("email", e);
+    setEmail(e);
   }, [presetEmail, setReqValue, setVerValue]);
 
-  /** คุมอายุของ interval ด้วย state cooldown:
-   * - เมื่อ cooldown หมด → clear interval ทิ้ง
-   * - ป้องกัน interval ซ้อน
-   */
+  /** ดูแลอายุของ interval ด้วย state cooldown */
   useEffect(() => {
     if (cooldown <= 0 && timer.current) {
       clearInterval(timer.current);
@@ -147,13 +152,27 @@ export function ForgotPasswordDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: e }),
       });
-      const json = await res.json().catch(() => null);
+      const json: unknown = await res.json().catch(() => null);
 
-      if (!res.ok || !json?.ok) {
-        toast.error("ส่งรหัสไม่สำเร็จ", {
-          description:
-            json?.error?.message || "ไม่สามารถส่งรหัสได้ โปรดลองใหม่อีกครั้ง",
-        });
+      const ok =
+        res.ok &&
+        !!(json && typeof json === "object") &&
+        "ok" in json &&
+        Boolean((json as { ok?: unknown }).ok);
+
+      if (!ok) {
+        const errObj =
+          json && typeof json === "object" && "error" in json
+            ? (json as { error?: unknown }).error
+            : undefined;
+        const msg =
+          errObj &&
+          typeof errObj === "object" &&
+          errObj !== null &&
+          "message" in errObj
+            ? String((errObj as { message?: unknown }).message ?? "")
+            : "ไม่สามารถส่งรหัสได้ โปรดลองใหม่อีกครั้ง";
+        toast.error("ส่งรหัสไม่สำเร็จ", { description: msg });
         return;
       }
 
@@ -168,8 +187,8 @@ export function ForgotPasswordDialog({
 
       setStep("verify");
       startCooldown(COOLDOWN_SEC);
-    } catch (err: any) {
-      toast.error("ส่งรหัสไม่สำเร็จ", { description: err?.message });
+    } catch (err: unknown) {
+      toast.error("ส่งรหัสไม่สำเร็จ", { description: getErrorMessage(err) });
     }
   };
 
@@ -184,26 +203,37 @@ export function ForgotPasswordDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(values),
       });
-      const json = await res.json().catch(() => null);
+      const json: unknown = await res.json().catch(() => null);
 
-      if (!res.ok || !json?.ok) {
-        toast.error("ยืนยันรหัสไม่สำเร็จ", {
-          description: json?.error?.message || "กรุณาตรวจสอบโค้ดอีกครั้ง",
-        });
+      const ok =
+        res.ok &&
+        !!(json && typeof json === "object") &&
+        "ok" in json &&
+        Boolean((json as { ok?: unknown }).ok);
+
+      if (!ok) {
+        const errObj =
+          json && typeof json === "object" && "error" in json
+            ? (json as { error?: unknown }).error
+            : undefined;
+        const msg =
+          errObj &&
+          typeof errObj === "object" &&
+          errObj !== null &&
+          "message" in errObj
+            ? String((errObj as { message?: unknown }).message ?? "")
+            : "กรุณาตรวจสอบโค้ดอีกครั้ง";
+        toast.error("ยืนยันรหัสไม่สำเร็จ", { description: msg });
         return;
       }
-
-      toast.success("ตั้งรหัสผ่านใหม่สำเร็จ", {
-        description: "โปรดเข้าสู่ระบบด้วยรหัสใหม่ของคุณ",
-      });
 
       // เคลียร์สถานะทุกอย่างให้เหมือนเปิด dialog ใหม่
       resetReq();
       resetVer();
       setStep("request");
       setOpen(false);
-    } catch (err: any) {
-      toast.error("ยืนยันรหัสไม่สำเร็จ", { description: err?.message });
+    } catch (err: unknown) {
+      toast.error("ยืนยันรหัสไม่สำเร็จ", { description: getErrorMessage(err) });
     }
   };
 
@@ -241,6 +271,7 @@ export function ForgotPasswordDialog({
           setStep("request");
           setCooldown(0);
           if (timer.current) clearInterval(timer.current);
+          timer.current = null;
         }
       }}
     >
@@ -330,7 +361,7 @@ export function ForgotPasswordDialog({
               )}
             </div>
 
-            {/* แถบล่าง: ปุ่มส่งรหัสอีกครั้ง + แจ้ง TTL → ช่วยลดความสับสนของผู้ใช้ */}
+            {/* แถบล่าง: ปุ่มส่งรหัสอีกครั้ง + แจ้ง TTL */}
             <div className="flex items-center justify-between">
               <Button
                 type="button"

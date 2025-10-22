@@ -1,15 +1,13 @@
 // src/lib/http.ts
 
+// fetchJSON (server-first) ใช้ได้ทั้ง server & client
+// - server: auto แนบ Authorization จาก cookie "mp_token" (ถ้าไม่สั่ง noAuth)
+// - client/server: ตั้ง JSON headers ให้, ต่อ base URL จาก env.API_BASE_URL
+// - รวมข้อความ error จาก upstream อย่างสุภาพ
+// - ตัด any ด้วย BodyInit typing ที่ชัดเจน
+
 import { env } from "./env";
 import { cookies as nextCookies, headers as nextHeaders } from "next/headers";
-
-/**
- * 🧰 fetchJSON (server-first)
- * ใช้ได้ทั้งฝั่ง server / client:
- * - ถ้าฝั่ง server → แนบ Authorization จาก cookie ให้อัตโนมัติ (ถ้าไม่สั่ง noAuth)
- * - auto set JSON headers
- * - build URL ด้วย API_BASE_URL (ยกเว้น absolute)
- */
 
 type JsonInit = Omit<RequestInit, "body" | "headers"> & {
   body?: unknown;
@@ -17,10 +15,10 @@ type JsonInit = Omit<RequestInit, "body" | "headers"> & {
 };
 
 type FetchOpts = {
-  authToken?: string | null; // override token (แทนที่ cookie)
-  noAuth?: boolean; // ไม่ต้องแนบ auth header
+  authToken?: string | null; // override token ถ้าต้องการ
+  noAuth?: boolean; // ไม่แนบ Authorization
   extraHeaders?: Record<string, string>; // header เพิ่มเติม
-  absolute?: boolean; // treat 'path' เป็น absolute (ไม่ prepend base)
+  absolute?: boolean; // treat path เป็น absolute URL (ไม่ต่อ base)
 };
 
 function isServer() {
@@ -35,18 +33,16 @@ function resolveUrl(path: string, absolute?: boolean) {
 }
 
 async function readAuthTokenFromCookie(): Promise<string | null> {
-  // อ่าน token จาก cookie เฉพาะบน server เท่านั้น
   if (!isServer()) return null;
   try {
     const cookieStore = await nextCookies();
-    const token = cookieStore.get("mp_token")?.value;
-    return token ?? null;
+    return cookieStore.get("mp_token")?.value ?? null;
   } catch {
     return null;
   }
 }
 
-// ดึง header จาก request ที่เข้ามา เพื่อ forward ต่อไปได้ (เช่น x-request-id)
+// Forward บาง headers จาก request ปัจจุบันไปยัง upstream ได้
 export async function forwardableHeaders(
   keys: string[] = ["x-request-id", "accept-language"]
 ) {
@@ -71,7 +67,7 @@ export async function fetchJSON<T = unknown>(
 ): Promise<T> {
   const url = resolveUrl(path, opts.absolute);
 
-  // base headers
+  // ---------- base headers ----------
   const baseHeaders = new Headers();
   baseHeaders.set("accept", "application/json");
 
@@ -90,7 +86,7 @@ export async function fetchJSON<T = unknown>(
     if (!mergedHeaders.has(k)) mergedHeaders.set(k, v);
   }
 
-  // แนบ Authorization เว้นแต่สั่ง noAuth
+  // ---------- แนบ Authorization เว้นแต่สั่ง noAuth ----------
   if (!opts.noAuth) {
     const cookieToken = await readAuthTokenFromCookie();
     const token = opts.authToken ?? cookieToken;
@@ -99,14 +95,17 @@ export async function fetchJSON<T = unknown>(
     }
   }
 
-  // extra headers (เช่น forwarded headers)
+  // header เพิ่มเติม
   if (opts.extraHeaders) {
     for (const [k, v] of Object.entries(opts.extraHeaders)) {
       mergedHeaders.set(k, v);
     }
   }
 
-  const body = isJsonBody ? JSON.stringify(init.body) : (init.body as any);
+  // ---------- body typing ให้ชัดเจน (ตัด any) ----------
+  const body: BodyInit | null = isJsonBody
+    ? JSON.stringify(init.body)
+    : (init.body as BodyInit | null | undefined) ?? null;
 
   const res = await fetch(url, {
     ...init,
@@ -116,7 +115,7 @@ export async function fetchJSON<T = unknown>(
     cache: "no-store",
   });
 
-  // ตรวจ content-type เพื่อตีความผลลัพธ์/รวมข้อความ error
+  // ---------- รวมข้อความ error ----------
   const contentType = res.headers.get("content-type") || "";
   const isJsonResponse = contentType.includes("application/json");
 
@@ -124,21 +123,39 @@ export async function fetchJSON<T = unknown>(
     let message = res.statusText || `Request failed (${res.status})`;
     if (isJsonResponse) {
       try {
-        const j = await res.json();
-        if (j?.error?.message) message = j.error.message;
-        else if (j?.message) message = j.message;
-      } catch {}
+        const j: unknown = await res.json();
+        if (
+          j &&
+          typeof j === "object" &&
+          "error" in j &&
+          (j as { error?: unknown }).error &&
+          typeof (j as { error: { message?: unknown } }).error === "object" &&
+          typeof (j as { error: { message?: unknown } }).error!.message ===
+            "string"
+        ) {
+          message = (j as { error: { message: string } }).error.message;
+        } else if (
+          j &&
+          typeof (j as { message?: unknown }).message === "string"
+        ) {
+          message = (j as { message: string }).message;
+        }
+      } catch {
+        // ignore
+      }
     } else {
       try {
         const txt = await res.text();
         if (txt) message = txt;
-      } catch {}
+      } catch {
+        // ignore
+      }
     }
     throw new Error(`Upstream ${res.status}: ${message}`);
   }
 
+  // ---------- success ----------
   if (!isJsonResponse) {
-    // ปล่อยเป็น text เมื่อไม่ใช่ JSON (ดาวน์โหลดไฟล์/ข้อความ)
     return (await res.text()) as unknown as T;
   }
   return (await res.json()) as T;

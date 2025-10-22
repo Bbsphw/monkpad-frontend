@@ -26,13 +26,26 @@ export type ListResult = {
   pageSize: number; // ขนาดหน้า
 };
 
+interface typeTransaction {
+  id?: string | number | null;
+  date?: string | null;
+  time?: string | null;
+  type?: string | null;
+  tag?: string | null;
+  category?: string | null;
+  value?: number | null;
+  amount?: number | null;
+  note?: string | null;
+  [key: string]: unknown;
+}
+
 /**
  * normalizeRow:
  * - ปรับ raw record จาก API ให้เป็น Transaction ที่ type-safe
  * - ป้องกันค่าแปลก เช่น null/undefined/format ผิด
  * - คืน null เมื่อข้อมูลสำคัญหายไป (id/date/type)
  */
-function normalizeRow(r: any): Transaction | null {
+function normalizeRow(r: typeTransaction): Transaction | null {
   if (!r) return null;
   const id = String(r.id ?? "");
   const date = String(r.date ?? "").slice(0, 10); // ตัดให้เหลือ YYYY-MM-DD

@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
  * - อ่าน token → ถอด uid
  * - proxy ไปยัง BE → คืนเฉพาะ field 'transactions' หรือ [] ถ้าไม่มี
  */
-export async function GET(req: Request) {
+export async function GET() {
   try {
     // ✅ auth
     const cookieStore = await cookies();

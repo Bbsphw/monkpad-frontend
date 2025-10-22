@@ -26,7 +26,7 @@ export async function POST(req: Request) {
       body: (() => {
         const fd = new FormData();
         // พยายามดึงชื่อไฟล์จาก file.name ถ้ามี ไม่งั้นตั้งชื่อ default
-        fd.set("file", file, (file as any)?.name || "slip.jpg");
+        fd.set("file", file, file?.name || "slip.jpg");
         return fd;
       })(),
       cache: "no-store", // ไม่ cache เพื่อให้ได้ผลล่าสุดทุกครั้ง

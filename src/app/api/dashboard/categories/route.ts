@@ -49,8 +49,21 @@ export async function GET(req: Request) {
     const allTx = Array.isArray(js?.transactions) ? js.transactions : [];
 
     // --- 4) filter เฉพาะเดือน/ปี/ประเภทที่ถามมา แล้ว aggregate ยอดตามหมวด ---
-    const filtered = allTx.filter((r: any) => {
-      const d = new Date(r.date);
+    interface Transaction {
+      date?: string | number | Date | null;
+      type?: "income" | "expense" | string;
+      tag?: string | number | null;
+      category?: string | number | null;
+      tag_id?: string | number | null;
+      value?: number | string | null;
+      amount?: number | string | null;
+      [key: string]: unknown;
+    }
+
+    const typedAllTx = allTx as Transaction[];
+
+    const filtered = typedAllTx.filter((r: Transaction) => {
+      const d = new Date(r.date as string);
       return (
         r.type === type &&
         d.getFullYear() === year &&

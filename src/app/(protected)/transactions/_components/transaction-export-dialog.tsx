@@ -22,7 +22,8 @@ export default function TransactionExportDialog() {
   // ✅ ดึงค่าปัจจุบันจาก context (params/rows/pagination)
   // - rows: แถวที่ “ผ่านตัวกรองแล้ว” ตาม filter ปัจจุบัน (เหมือนในตาราง)
   // - params/pagination: มีไว้เผื่อขยายฟีเจอร์ (เช่น export เฉพาะหน้า, export ทั้งหมด)
-  const { params, rows, pagination } = useTransactionsContext();
+  // const { params, rows, pagination } = useTransactionsContext();
+  const { rows } = useTransactionsContext();
 
   // กด “ดาวน์โหลด CSV”
   async function handleExportCSV() {

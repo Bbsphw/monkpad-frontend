@@ -35,8 +35,8 @@ export default function TransactionTable() {
   // - pagination: meta ของเพจปัจจุบัน
   // - setFilter: เปลี่ยนตัวกรอง/เพจ (single source of truth)
   // - reload: ใช้รีเฟรชข้อมูลเมื่อมี CRUD
-  const { rows, loading, pagination, setFilter, reload } =
-    useTransactionsContext();
+  // const { rows, loading, pagination, setFilter, reload } =
+  const { rows, loading, pagination, setFilter } = useTransactionsContext();
 
   /* ───────────────── Skeleton ระหว่างโหลด ─────────────────
    * แยก branch ชัดเจน ลด layout shift และทำให้ผู้ใช้เข้าใจว่ากำลังโหลด

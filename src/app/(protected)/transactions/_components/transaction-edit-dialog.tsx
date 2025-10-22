@@ -41,7 +41,7 @@ const FormSchema = z.object({
 });
 
 // ชนิดที่ form รับเข้ามาก่อน coerce (ตรงกับค่าจากอินพุต)
-type FormInput = z.input<typeof FormSchema>;
+// type FormInput = z.input<typeof FormSchema>;
 // ชนิดที่ได้หลังผ่าน resolver (ใช้ใน onSubmit)
 type FormOutput = z.output<typeof FormSchema>;
 
@@ -81,12 +81,12 @@ export default function TransactionEditDialog({
     handleSubmit,
     formState: { isSubmitting },
     reset,
-  } = useForm<FormInput, any, FormOutput>({
-    resolver: zodResolver(FormSchema) as Resolver<FormInput, any, FormOutput>,
+  } = useForm<FormOutput>({
+    resolver: zodResolver(FormSchema) as unknown as Resolver<FormOutput>,
     defaultValues: {
       amount: defaultValues.amount,
       note: defaultValues.note ?? "",
-      date: defaultValues.date, // ให้ z.coerce.date จัดการตอน validate/submit
+      date: toDate(defaultValues.date) ?? new Date(), // ให้ค่าเป็น Date เพื่อสอดคล้องกับ FormOutput
       time: (defaultValues.time ?? "12:00").slice(0, 5),
     },
     mode: "onChange",
@@ -131,8 +131,14 @@ export default function TransactionEditDialog({
 
       setOpen(false);
       // onUpdated?.(); // คงไว้เป็น option เผื่อ parent ต้องการ hook เอง
-    } catch (e: any) {
-      toast.error("อัปเดตไม่สำเร็จ", { description: e?.message });
+    } catch (e: unknown) {
+      const message =
+        e instanceof Error
+          ? e.message
+          : typeof e === "string"
+          ? e
+          : "ไม่ทราบสาเหตุ";
+      toast.error("อัปเดตไม่สำเร็จ", { description: message });
     }
   }
 
@@ -145,7 +151,7 @@ export default function TransactionEditDialog({
       reset({
         amount: defaultValues.amount,
         note: defaultValues.note ?? "",
-        date: defaultValues.date, // string (จะถูก coerce เมื่อ validate/submit)
+        date: toDate(defaultValues.date) ?? new Date(), // ให้ค่าเป็น Date เพื่อสอดคล้องกับ FormOutput
         time: (defaultValues.time ?? "12:00").slice(0, 5),
       });
     }
@@ -222,7 +228,7 @@ export default function TransactionEditDialog({
 
           {/* Date / Time */}
           <div className="grid grid-cols-2 gap-3">
-            {/* Date picker: เก็บใน form เป็น string แต่แสดง/เลือกเป็น Date */}
+            {/* Date picker: เก็บใน form เป็น Date และแสดง/เลือกเป็น Date */}
             <div className="space-y-1.5">
               <Label>วันที่</Label>
               <Controller
@@ -251,10 +257,8 @@ export default function TransactionEditDialog({
                         <Calendar
                           mode="single"
                           selected={selected}
-                          // เก็บกลับเข้า form เป็น string "YYYY-MM-DD"
-                          onSelect={(d) =>
-                            d && field.onChange(format(d, "yyyy-MM-dd"))
-                          }
+                          // เก็บกลับเข้า form เป็น Date
+                          onSelect={(d) => d && field.onChange(d)}
                           initialFocus
                           locale={th}
                         />

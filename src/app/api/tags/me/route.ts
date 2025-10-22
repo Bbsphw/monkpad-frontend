@@ -25,7 +25,7 @@ export async function GET() {
 
     // ---- ดึง tag ของผู้ใช้ (ฝั่ง BE ป้องกัน auth อยู่แล้ว) ----
     // ข้อดีของ fetchJSON: รวมการ set header/จัดการ error ให้สม่ำเสมอ
-    const tags = await fetchJSON<any[]>(`/tags/${uid}`);
+    const tags = await fetchJSON<unknown[]>(`/tags/${uid}`);
 
     // ---- ส่งกลับรูปแบบมาตรฐาน ----
     return Response.json({ ok: true, data: tags });

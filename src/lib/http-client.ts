@@ -1,6 +1,10 @@
 // src/lib/http-client.ts
 
-import { env } from "./env";
+// ใช้ฝั่ง Client เป็นหลัก (เรียก internal route เช่น /api/...)
+// - ตั้ง header JSON ให้อัตโนมัติ
+// - รองรับ body แบบ JSON / FormData / Blob
+// - รวมข้อความ error จาก payload เมื่อ upstream ตอบไม่ 2xx
+// - ตัด no-explicit-any ด้วย unknown และ BodyInit ที่ชัดเจน
 
 type JsonInit = Omit<RequestInit, "body" | "headers"> & {
   body?: unknown;
@@ -11,16 +15,14 @@ export async function fetchJSONClient<T = unknown>(
   path: string,
   init: JsonInit = {}
 ): Promise<T> {
-  // ฝั่ง Client: อนุญาตทั้ง relative (/api/...) และ absolute (http/https)
-  // - ใช้ relative เพื่อพก cookie อัตโนมัติ (credentialed)
+  // ให้ path เป็น relative (เช่น /api/...) เพื่อพก cookie อัตโนมัติ
   const url =
     path.startsWith("http://") || path.startsWith("https://") ? path : path;
 
-  // ใส่ accept: application/json ไว้ก่อน
+  // ---------- headers (JSON by default) ----------
   const headers = new Headers(init.headers);
   headers.set("accept", "application/json");
 
-  // ตรวจสภาพ body → ถ้าเป็น object (ไม่ใช่ FormData/Blob/ArrayBuffer) ค่อยแปะ content-type
   const isJsonBody =
     init.body &&
     typeof init.body === "object" &&
@@ -30,25 +32,51 @@ export async function fetchJSONClient<T = unknown>(
 
   if (isJsonBody) headers.set("content-type", "application/json");
 
+  // ---------- body typing ให้ชัดเจน (ตัด any) ----------
+  const body: BodyInit | null = isJsonBody
+    ? JSON.stringify(init.body)
+    : (init.body as BodyInit | null | undefined) ?? null;
+
   const res = await fetch(url, {
     ...init,
     headers,
-    body: isJsonBody ? JSON.stringify(init.body) : (init.body as any),
-    credentials: "include", // ให้ส่ง cookie ไปด้วย (สำคัญเวลาคุยกับ /api/*)
-    cache: "no-store", // ไม่ cached
+    body,
+    credentials: "include",
+    cache: "no-store",
   });
 
-  // รวม error message จาก body ถ้าทำได้ → โยน Error เดียวกันให้ผู้ใช้ไปจัดการ
+  // ---------- รวมข้อความ error จาก payload ----------
   if (!res.ok) {
     let msg = res.statusText;
     try {
-      const j = await res.json();
-      msg = j?.error?.message || j?.message || msg;
-    } catch {}
+      const j: unknown = await res.json();
+      if (
+        j &&
+        typeof j === "object" &&
+        "error" in j &&
+        (j as { error?: unknown }).error &&
+        typeof (j as { error: { message?: unknown } }).error === "object" &&
+        typeof (j as { error: { message?: unknown } }).error!.message ===
+          "string"
+      ) {
+        msg = (j as { error: { message: string } }).error.message;
+      } else if (
+        j &&
+        typeof (j as { message?: unknown }).message === "string"
+      ) {
+        msg = (j as { message: string }).message;
+      }
+    } catch {
+      // ถ้า parse JSON ไม่ได้ → ใช้ statusText ตามเดิม
+    }
     throw new Error(`Request ${res.status}: ${msg}`);
   }
 
-  // ตอบกลับเป็น JSON ถ้า content-type เป็น JSON, ไม่งั้นเป็น text
+  // ---------- ตีความ response ----------
   const ct = res.headers.get("content-type") || "";
-  return (ct.includes("application/json") ? res.json() : res.text()) as any;
+  if (ct.includes("application/json")) {
+    return (await res.json()) as T;
+  }
+  const text = await res.text();
+  return text as unknown as T;
 }

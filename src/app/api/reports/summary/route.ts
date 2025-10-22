@@ -5,6 +5,51 @@ import { env } from "@/lib/env";
 import { decodeJwt } from "@/lib/jwt";
 import { handleRouteError, jsonError } from "@/lib/errors";
 
+/* ───────────────────────────── Types ─────────────────────────────
+ * อธิบายรูปแบบข้อมูลที่เรารอรับจาก upstream API ชัดเจน
+ */
+
+/** แถวข้อมูลสรุปรายเดือนจาก `/month_results/{uid}/{year}` */
+type MonthResultRow = {
+  month: number | string; // backend อาจส่งมาเป็น number หรือ string
+  income?: number | null;
+  expense?: number | null;
+};
+
+/** ธุรกรรมที่สนใจใช้ในไฟล์นี้ (date/type) */
+type TransactionDTO = {
+  date: string; // ISO date string (YYYY-MM-DD)
+  type: "income" | "expense";
+};
+
+/** payload จาก `/transactions/{uid}` */
+type TransactionsPayload = {
+  transactions?: TransactionDTO[];
+} | null;
+
+/* ───────────────────────────── Helpers ─────────────────────────────
+ * type guard / parser เล็ก ๆ สำหรับ validate แบบหลวม ๆ
+ */
+
+/** ตรวจว่าเป็น array ของ MonthResultRow อย่างคร่าว ๆ */
+function asMonthResultArray(input: unknown): MonthResultRow[] {
+  return Array.isArray(input) ? (input as MonthResultRow[]) : [];
+}
+
+/** ดึง array ของธุรกรรมจาก payload ที่อาจ null/รูปทรงไม่แน่นอน */
+function extractTransactions(input: unknown): TransactionDTO[] {
+  const obj = (input ?? {}) as { transactions?: unknown };
+  return Array.isArray(obj.transactions)
+    ? (obj.transactions as TransactionDTO[])
+    : [];
+}
+
+/** ตรวจเดือน/ปีของวันที่ ISO ให้ตรงกับที่ระบุ */
+function inYearMonth(dISO: string, y: number, m: number): boolean {
+  const d = new Date(dISO);
+  return d.getFullYear() === y && d.getMonth() + 1 === m;
+}
+
 /**
  * GET /api/reports/summary
  * ตัวอย่าง:
@@ -41,22 +86,31 @@ export async function GET(req: Request) {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
       cache: "no-store",
     });
-    const mrJs = await mr.json().catch(() => null);
+
+    // พยายาม parse JSON หากพังให้เป็น null แล้วใช้ fallback ที่ปลอดภัย
+    const mrJs: unknown = await mr.json().catch(() => null);
     if (!mr.ok)
-      return jsonError(mr.status, mrJs?.detail || "month-results failed");
-    const rows: any[] = Array.isArray(mrJs) ? mrJs : [];
+      return jsonError(
+        mr.status,
+        (mrJs as { detail?: string } | null)?.detail || "month-results failed"
+      );
+
+    // ✅ rows: เป็น array ของ MonthResultRow (แทน any[])
+    const rows: MonthResultRow[] = asMonthResultArray(mrJs);
 
     // ===== โหมด MONTH: สรุปเฉพาะเดือน =====
     if (mode === "MONTH") {
       if (!Number.isFinite(month) || month < 1 || month > 12)
         return jsonError(422, "month is required (1–12)");
 
-      // สรุปรายเดือนจาก month_results
-      const row = rows.find((r) => Number(r.month) === month) ?? null;
+      // สรุปรายเดือนจาก month_results → หา row ตามเดือน
+      const row =
+        rows.find((r) => Number(r.month) === month) ??
+        (null as MonthResultRow | null);
       const income = Number(row?.income ?? 0) || 0;
       const expense = Number(row?.expense ?? 0) || 0;
 
-      // นับจำนวนธุรกรรมในเดือนนั้น (ตาม type ที่เลือก)
+      // ดึงธุรกรรมทั้งหมดของผู้ใช้เพื่อ "นับ" จำนวนรายการในเดือนนั้น (กรองตาม type)
       const tr = await fetch(`${env.API_BASE_URL}/transactions/${uid}`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -64,12 +118,13 @@ export async function GET(req: Request) {
         },
         cache: "no-store",
       });
-      const trJs = await tr.json().catch(() => null);
-      const txAll = Array.isArray(trJs?.transactions) ? trJs.transactions : [];
 
-      const txRows = txAll.filter((r: any) => {
-        const d = new Date(r.date);
-        const inYM = d.getFullYear() === year && d.getMonth() + 1 === month;
+      const trJs: TransactionsPayload = await tr.json().catch(() => null);
+      const txAll: TransactionDTO[] = extractTransactions(trJs);
+
+      // ✅ txRows: array ของธุรกรรมที่ตรงเดือน/ปี และตรง type (ถ้าเลือก)
+      const txRows = txAll.filter((r) => {
+        const inYM = inYearMonth(r.date, year, month);
         const typeOk = type === "all" ? true : r.type === type;
         return inYM && typeOk;
       });
@@ -88,19 +143,17 @@ export async function GET(req: Request) {
     }
 
     // ===== โหมด RANGE: (ย่อ) รวมทั้งปี =====
-    const income = rows.reduce((s, r) => s + (Number(r.income) || 0), 0);
-    const expense = rows.reduce((s, r) => s + (Number(r.expense) || 0), 0);
+    const income = rows.reduce((s, r) => s + (Number(r.income ?? 0) || 0), 0);
+    const expense = rows.reduce((s, r) => s + (Number(r.expense ?? 0) || 0), 0);
 
-    // นับจำนวนธุรกรรมทั้งปี (ไม่กรอง type ในโหมด RANGE; ถ้าต้องการสามารถขยับเพิ่มได้)
+    // นับจำนวนธุรกรรมทั้งปี (ตรงปีอย่างเดียว ไม่กรอง type)
     const tr = await fetch(`${env.API_BASE_URL}/transactions/${uid}`, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
       cache: "no-store",
     });
-    const trJs = await tr.json().catch(() => null);
-    const txAll = Array.isArray(trJs?.transactions) ? trJs.transactions : [];
-    const txRows = txAll.filter(
-      (r: any) => new Date(r.date).getFullYear() === year
-    );
+    const trJs: TransactionsPayload = await tr.json().catch(() => null);
+    const txAll: TransactionDTO[] = extractTransactions(trJs);
+    const txRows = txAll.filter((r) => new Date(r.date).getFullYear() === year);
 
     return Response.json({
       ok: true,

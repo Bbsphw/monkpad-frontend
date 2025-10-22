@@ -23,12 +23,12 @@ import {
 } from "@/components/ui/card";
 import { Loading } from "@/components/common/loading";
 
-/**
- * ✅ Schema — ตรวจสอบข้อมูลสมัครสมาชิก
- * ----------------------------------------
- * - username: ยาว ≥3 ตัว
- * - email: รูปแบบอีเมล
- * - password: ยาว ≥8 ตัว
+/* ──────────────────────────────────────────────
+ *  Schema: ตรวจสอบข้อมูลสมัครสมาชิก
+ * ──────────────────────────────────────────────
+ * - username: ≥3 ตัวอักษร
+ * - email: รูปแบบอีเมลถูกต้อง
+ * - password: ≥8 ตัวอักษร
  * - confirmPassword: ต้องตรงกับ password
  */
 const signUpSchema = z
@@ -43,19 +43,28 @@ const signUpSchema = z
     message: "รหัสผ่านไม่ตรงกัน",
   });
 
+// ประเภทข้อมูลที่ใช้กับ react-hook-form
 type SignUpFormData = z.infer<typeof signUpSchema>;
 
-/**
- * ✅ Client Component — ฟอร์มสมัครสมาชิก
- * ----------------------------------------
- * - ใช้ zod + react-hook-form เพื่อ validate
- * - มี UX แสดง strength ของรหัสผ่านแบบเรียลไทม์
+/* ปลอดภัยจาก unknown error → แปลงเป็นข้อความสำหรับ toast */
+const getErrorMessage = (err: unknown): string => {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  return "เกิดข้อผิดพลาด";
+};
+
+/* ──────────────────────────────────────────────
+ *  Component: SignUpClient
+ * ──────────────────────────────────────────────
+ * ฟอร์มสมัครสมาชิกฝั่ง Client
+ * - validate ด้วย zod
+ * - ตรวจ strength ของรหัสผ่านแบบเรียลไทม์
  */
 export default function SignUpClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // หลังสมัครเสร็จ → redirect ไปหน้า sign-in (หรือ next param ถ้ามี)
+  // redirect หลังสมัครสำเร็จ
   const nextParam = searchParams.get("next");
   const next =
     typeof nextParam === "string" && nextParam.startsWith("/")
@@ -66,6 +75,7 @@ export default function SignUpClient() {
   const [showPwd, setShowPwd] = useState(false);
   const [showPwd2, setShowPwd2] = useState(false);
 
+  // ฟอร์มหลัก
   const {
     register,
     handleSubmit,
@@ -104,7 +114,7 @@ export default function SignUpClient() {
     pwdChecks.numberOk;
   const confirmOk = confirmPassword.length > 0 && password === confirmPassword;
 
-  // แสดง check-list เงื่อนไขรหัสผ่าน
+  /* Subcomponent: hint ของ password strength */
   const Hint = ({ ok, text }: { ok: boolean; text: string }) => (
     <div className="flex items-start gap-2 text-xs">
       {ok ? (
@@ -116,12 +126,7 @@ export default function SignUpClient() {
     </div>
   );
 
-  /**
-   * ✅ Submit
-   * ----------
-   * - POST /api/auth/sign-up
-   * - ตรวจ error เฉพาะ username/email ซ้ำ
-   */
+  /* ------------------- Submit handler ------------------- */
   const onSubmit: SubmitHandler<SignUpFormData> = async (values) => {
     setSubmitting(true);
     try {
@@ -135,11 +140,14 @@ export default function SignUpClient() {
         }),
       });
 
-      const json = await res.json().catch(() => null);
+      const json = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        error?: { message?: string };
+      } | null;
 
       if (!res.ok || !json?.ok) {
         const msg = json?.error?.message || "สมัครสมาชิกไม่สำเร็จ";
-        // ตรวจข้อความที่มาจาก backend เพื่อแปลเป็น message ไทย
+        // ตรวจข้อความจาก backend เพื่อแปลเป็นไทย
         if (/Username already registered/i.test(msg)) {
           setError("username", { message: "ชื่อผู้ใช้นี้ถูกใช้แล้ว" });
         } else if (/Email already registered/i.test(msg)) {
@@ -153,21 +161,20 @@ export default function SignUpClient() {
         description: "โปรดเข้าสู่ระบบเพื่อเริ่มใช้งาน",
       });
       router.replace(next);
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error("สมัครสมาชิกไม่สำเร็จ", {
-        description: err?.message ?? "เกิดข้อผิดพลาด",
+        description: getErrorMessage(err),
       });
     } finally {
       setSubmitting(false);
     }
   };
 
-  /* ✅ UI ส่วนฟอร์มสมัครสมาชิก */
+  /* ------------------- UI ------------------- */
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-soft px-4">
       <Card className="w-full max-w-md shadow-strong">
         <CardHeader className="text-center space-y-2">
-          {/* โลโก้ไอคอน */}
           <div className="mx-auto w-12 h-12 bg-primary rounded-xl flex items-center justify-center mb-4">
             <UserPlus className="h-6 w-6 text-primary-foreground" />
           </div>
@@ -233,7 +240,7 @@ export default function SignUpClient() {
                     (errors.password ? "border-destructive " : "") + "pr-10"
                   }
                 />
-                {/* ปุ่ม toggle password */}
+                {/* ปุ่ม toggle แสดง/ซ่อนรหัสผ่าน */}
                 <Button
                   type="button"
                   variant="ghost"
@@ -318,7 +325,7 @@ export default function SignUpClient() {
               )}
             </Button>
 
-            {/* LINK to sign-in */}
+            {/* LINK → sign-in */}
             <div className="mt-6 text-center text-sm">
               <span className="text-muted-foreground">มีบัญชีแล้ว? </span>
               <Link

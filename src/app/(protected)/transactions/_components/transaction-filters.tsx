@@ -57,7 +57,7 @@ export function useTransactionsContext() {
 type TxnType = "all" | "income" | "expense";
 const TXN_TYPES = ["all", "income", "expense"] as const;
 const isTxnType = (v: string): v is TxnType =>
-  (TXN_TYPES as readonly string[]).includes(v as any);
+  (TXN_TYPES as readonly string[]).includes(v);
 
 export default function TransactionFilters() {
   // รับ params ปัจจุบัน + setter จาก context
