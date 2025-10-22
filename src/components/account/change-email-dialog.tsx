@@ -6,7 +6,6 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { changeEmailSchema, type ChangeEmailForm } from "@/lib/validators";
-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -19,6 +18,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { useRouter } from "next/navigation";
 
 export function ChangeEmailDialog({
   asChild,
@@ -29,6 +29,7 @@ export function ChangeEmailDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const router = useRouter();
 
   const {
     register,
@@ -58,6 +59,15 @@ export function ChangeEmailDialog({
       toast.success("เปลี่ยนอีเมลสำเร็จ");
       reset();
       setOpen(false);
+      // แจ้งและรีเฟรช layout → avatar/ชื่อที่ Sidebar อัปเดตทันที
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("mp:profile:changed", {
+            detail: { field: "email" },
+          })
+        );
+      }
+      router.refresh();
     } finally {
       setSubmitting(false);
     }
