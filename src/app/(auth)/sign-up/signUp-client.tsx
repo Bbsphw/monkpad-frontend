@@ -1,9 +1,12 @@
+// src/app/(auth)/sign-up/signUp-client.tsx
+
 "use client";
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm, type SubmitHandler } from "react-hook-form";
+import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { CheckCircle2, XCircle, Eye, EyeOff, UserPlus } from "lucide-react";
@@ -19,15 +22,60 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Loading } from "@/components/common/loading";
-import { signUpSchema, type SignUpFormData } from "@/lib/validators";
-import { registerUserAction } from "./actions";
 
+/* ──────────────────────────────────────────────
+ *  Schema: ตรวจสอบข้อมูลสมัครสมาชิก
+ * ──────────────────────────────────────────────
+ * - username: ≥3 ตัวอักษร
+ * - email: รูปแบบอีเมลถูกต้อง
+ * - password: ≥8 ตัวอักษร
+ * - confirmPassword: ต้องตรงกับ password
+ */
+const signUpSchema = z
+  .object({
+    username: z.string().min(3, "ต้องมีอย่างน้อย 3 ตัวอักษร"),
+    email: z.string().email("รูปแบบอีเมลไม่ถูกต้อง"),
+    password: z.string().min(8, "อย่างน้อย 8 ตัวอักษร"),
+    confirmPassword: z.string().min(1, "กรุณายืนยันรหัสผ่าน"),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    path: ["confirmPassword"],
+    message: "รหัสผ่านไม่ตรงกัน",
+  });
+
+// ประเภทข้อมูลที่ใช้กับ react-hook-form
+type SignUpFormData = z.infer<typeof signUpSchema>;
+
+/* ปลอดภัยจาก unknown error → แปลงเป็นข้อความสำหรับ toast */
+const getErrorMessage = (err: unknown): string => {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  return "เกิดข้อผิดพลาด";
+};
+
+/* ──────────────────────────────────────────────
+ *  Component: SignUpClient
+ * ──────────────────────────────────────────────
+ * ฟอร์มสมัครสมาชิกฝั่ง Client
+ * - validate ด้วย zod
+ * - ตรวจ strength ของรหัสผ่านแบบเรียลไทม์
+ */
 export default function SignUpClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // redirect หลังสมัครสำเร็จ
+  const nextParam = searchParams.get("next");
+  const next =
+    typeof nextParam === "string" && nextParam.startsWith("/")
+      ? nextParam
+      : "/sign-in";
+
   const [submitting, setSubmitting] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
   const [showPwd2, setShowPwd2] = useState(false);
 
+  // ฟอร์มหลัก
   const {
     register,
     handleSubmit,
@@ -45,6 +93,7 @@ export default function SignUpClient() {
     },
   });
 
+  // ตรวจความแข็งแรงของรหัสผ่านแบบเรียลไทม์
   const password = watch("password");
   const confirmPassword = watch("confirmPassword");
 
@@ -65,6 +114,7 @@ export default function SignUpClient() {
     pwdChecks.numberOk;
   const confirmOk = confirmPassword.length > 0 && password === confirmPassword;
 
+  /* Subcomponent: hint ของ password strength */
   const Hint = ({ ok, text }: { ok: boolean; text: string }) => (
     <div className="flex items-start gap-2 text-xs">
       {ok ? (
@@ -76,32 +126,51 @@ export default function SignUpClient() {
     </div>
   );
 
+  /* ------------------- Submit handler ------------------- */
   const onSubmit: SubmitHandler<SignUpFormData> = async (values) => {
     setSubmitting(true);
     try {
-      const result = await registerUserAction(values);
+      const res = await fetch("/api/auth/sign-up", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: values.username.trim(),
+          email: values.email.trim(),
+          password: values.password,
+        }),
+      });
 
-      if (!result.success) {
-        if (result.fieldErrors) {
-          Object.entries(result.fieldErrors).forEach(([field, msgs]) => {
-            if (msgs?.length)
-              setError(field as keyof SignUpFormData, { message: msgs[0] });
-          });
+      const json = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        error?: { message?: string };
+      } | null;
+
+      if (!res.ok || !json?.ok) {
+        const msg = json?.error?.message || "สมัครสมาชิกไม่สำเร็จ";
+        // ตรวจข้อความจาก backend เพื่อแปลเป็นไทย
+        if (/Username already registered/i.test(msg)) {
+          setError("username", { message: "ชื่อผู้ใช้นี้ถูกใช้แล้ว" });
+        } else if (/Email already registered/i.test(msg)) {
+          setError("email", { message: "อีเมลนี้ถูกใช้แล้ว" });
         }
-        const msg = result.formError || "สมัครสมาชิกไม่สำเร็จ";
         toast.error("สมัครสมาชิกไม่สำเร็จ", { description: msg });
         return;
       }
 
-      toast.success("สมัครสมาชิกสำเร็จ", { description: "โปรดเข้าสู่ระบบ" });
-      router.replace("/sign-in");
-    } catch (err) {
-      toast.error("สมัครสมาชิกไม่สำเร็จ");
+      toast.success("สมัครสมาชิกสำเร็จ", {
+        description: "โปรดเข้าสู่ระบบเพื่อเริ่มใช้งาน",
+      });
+      router.replace(next);
+    } catch (err: unknown) {
+      toast.error("สมัครสมาชิกไม่สำเร็จ", {
+        description: getErrorMessage(err),
+      });
     } finally {
       setSubmitting(false);
     }
   };
 
+  /* ------------------- UI ------------------- */
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-soft px-4">
       <Card className="w-full max-w-md shadow-strong">
@@ -119,12 +188,12 @@ export default function SignUpClient() {
             className="space-y-4"
             noValidate
           >
-            {/* Username */}
+            {/* USERNAME */}
             <div className="space-y-2">
               <Label htmlFor="username">ชื่อผู้ใช้</Label>
               <Input
                 id="username"
-                placeholder="เช่น user"
+                placeholder="เช่น user123"
                 autoComplete="username"
                 {...register("username")}
                 aria-invalid={!!errors.username}
@@ -137,7 +206,7 @@ export default function SignUpClient() {
               )}
             </div>
 
-            {/* Email */}
+            {/* EMAIL */}
             <div className="space-y-2">
               <Label htmlFor="email">อีเมล</Label>
               <Input
@@ -156,7 +225,7 @@ export default function SignUpClient() {
               )}
             </div>
 
-            {/* Password */}
+            {/* PASSWORD */}
             <div className="space-y-2">
               <Label htmlFor="password">รหัสผ่าน</Label>
               <div className="relative">
@@ -171,6 +240,7 @@ export default function SignUpClient() {
                     (errors.password ? "border-destructive " : "") + "pr-10"
                   }
                 />
+                {/* ปุ่ม toggle แสดง/ซ่อนรหัสผ่าน */}
                 <Button
                   type="button"
                   variant="ghost"
@@ -193,19 +263,16 @@ export default function SignUpClient() {
                 </p>
               )}
 
-              {/* Checklist */}
+              {/* เงื่อนไขรหัสผ่าน */}
               <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
-                <Hint
-                  ok={pwdChecks.lengthOk}
-                  text="ความยาวอย่างน้อย 8 ตัวอักษร"
-                />
+                <Hint ok={pwdChecks.lengthOk} text="อย่างน้อย 8 ตัวอักษร" />
                 <Hint ok={pwdChecks.upperOk} text="มีตัวอักษรพิมพ์ใหญ่ (A-Z)" />
                 <Hint ok={pwdChecks.lowerOk} text="มีตัวอักษรพิมพ์เล็ก (a-z)" />
                 <Hint ok={pwdChecks.numberOk} text="มีตัวเลข (0-9)" />
               </div>
             </div>
 
-            {/* Confirm Password */}
+            {/* CONFIRM PASSWORD */}
             <div className="space-y-2">
               <Label htmlFor="confirmPassword">ยืนยันรหัสผ่าน</Label>
               <div className="relative">
@@ -221,6 +288,7 @@ export default function SignUpClient() {
                     "pr-10"
                   }
                 />
+                {/* toggle visibility */}
                 <Button
                   type="button"
                   variant="ghost"
@@ -244,6 +312,7 @@ export default function SignUpClient() {
               )}
             </div>
 
+            {/* SUBMIT */}
             <Button
               type="submit"
               className="w-full gradient-primary"
@@ -256,11 +325,13 @@ export default function SignUpClient() {
               )}
             </Button>
 
+            {/* LINK → sign-in */}
             <div className="mt-6 text-center text-sm">
               <span className="text-muted-foreground">มีบัญชีแล้ว? </span>
               <Link
                 href="/sign-in"
                 className="text-primary hover:text-primary-hover font-medium"
+                prefetch={false}
               >
                 เข้าสู่ระบบ
               </Link>

@@ -1,10 +1,12 @@
-// components/testimonials-section.tsx
+// src/components/sections/home/testimonials-section.tsx
+
 "use client";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Star } from "lucide-react";
 
+/** รีวิว/คำชมจากผู้ใช้ (ชื่อ/บทบาท/คอนเทนต์/เรตติ้ง) */
 type Testimonial = {
   name: string;
   role: string;
@@ -13,6 +15,7 @@ type Testimonial = {
   avatarUrl?: string;
 };
 
+/** ตัวอย่างรีวิว (ข้อมูล mock) */
 const TESTIMONIALS = [
   {
     name: "สมชาย ใจดี",
@@ -30,6 +33,7 @@ const TESTIMONIALS = [
   },
 ] as const satisfies ReadonlyArray<Testimonial>;
 
+/** แถบดาว (อ่านได้ด้วย SR: บอกจำนวนดาวจาก 5) */
 function Stars({ rating }: { rating: number }) {
   const max = 5;
   return (
@@ -56,6 +60,7 @@ function Stars({ rating }: { rating: number }) {
   );
 }
 
+/** การ์ดคำชม 1 ใบ (รูปโปรไฟล์ + เนื้อหา + ชื่อ/บทบาท) */
 function TestimonialCard({ t }: { t: Testimonial }) {
   return (
     <li className="list-none">
@@ -87,6 +92,7 @@ function TestimonialCard({ t }: { t: Testimonial }) {
   );
 }
 
+/** Section รีวิวจากผู้ใช้: heading + กริดการ์ดรีวิว */
 export default function TestimonialsSection() {
   return (
     <section aria-labelledby="testimonials-title" className="bg-muted/30 py-20">

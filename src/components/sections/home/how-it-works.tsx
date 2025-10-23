@@ -1,12 +1,15 @@
-// components/how-it-works.tsx
+// src/components/sections/home/how-it-works.tsx
+
 "use client";
 
+/** โครง step แสดงลำดับการใช้งาน */
 type Step = {
   step: number;
   title: string;
   description: string;
 };
 
+/** 3 ขั้นตอนการใช้งาน (คงที่/อ่านง่าย) */
 const STEPS = [
   {
     step: 1,
@@ -25,11 +28,12 @@ const STEPS = [
   },
 ] as const satisfies ReadonlyArray<Step>;
 
+/** Section อธิบายวิธีใช้งานแบบทีละขั้น */
 export default function HowItWorks() {
   return (
     <section aria-labelledby="how-title" className="py-20">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Heading */}
+        {/* หัวข้อหลักของ section */}
         <div className="mb-16 text-center">
           <h2
             id="how-title"
@@ -42,11 +46,12 @@ export default function HowItWorks() {
           </p>
         </div>
 
-        {/* Ordered steps */}
+        {/* แสดงขั้นตอนเป็นลิสต์ลำดับ (ol/li) เพื่อสื่อความหมายว่าเป็นลำดับ */}
         <ol role="list" className="grid grid-cols-1 gap-8 md:grid-cols-3">
-          {STEPS.map((s, i) => (
+          {STEPS.map((s) => (
             <li key={s.step} className="relative">
               <div className="h-full rounded-xl border bg-card p-6 text-center">
+                {/* วงกลมตัวเลขขั้นตอน (เพิ่ม sr-only “ขั้นตอน” เพื่ออ่านด้วย SR) */}
                 <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-primary text-primary-foreground text-xl font-bold">
                   {s.step}
                   <span className="sr-only"> ขั้นตอน</span>

@@ -1,4 +1,5 @@
-// components/hero-section.tsx
+// src/components/sections/home/hero-section.tsx
+
 "use client";
 
 import Link from "next/link";
@@ -6,6 +7,7 @@ import { ArrowRight, FileUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
+/** ฮีโร่ส่วนบนของหน้าแรก: Headline + คำอธิบาย + ปุ่ม CTA + ตัวเลขสถิติ */
 export default function HeroSection() {
   return (
     <section
@@ -14,10 +16,12 @@ export default function HeroSection() {
     >
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-16 md:pt-24 md:pb-20">
         <div className="mx-auto max-w-3xl text-center">
+          {/* ป้ายเปิดตัว (ใช้ Badge ของ UI lib) */}
           <Badge variant="secondary" className="mb-6">
             🎉 เปิดตัวใหม่ — ใช้งานฟรี!
           </Badge>
 
+          {/* Headline แบบมีไฮไลต์ด้วย gradient text */}
           <h1
             id="hero-title"
             className="text-balance text-4xl font-bold tracking-tight text-foreground md:text-6xl mb-6"
@@ -33,17 +37,20 @@ export default function HeroSection() {
             </span>
           </h1>
 
+          {/* คำอธิบายสั้น ๆ (ใช้ text-pretty เพื่อบาลานซ์ตัดคำ) */}
           <p className="text-pretty mx-auto mb-8 max-w-2xl text-lg text-muted-foreground md:text-xl">
             อัปโหลดสลิปธนาคาร ปล่อยให้ AI ดึงข้อมูล
             และจัดการการเงินของคุณอย่างง่ายดาย และแม่นยำ ลดเวลาการบันทึกลงได้ราว
             90%
           </p>
 
+          {/* ปุ่มคู่ CTA — สมัคร / ดูตัวอย่าง */}
           <div className="mb-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <Button
               size="lg"
               asChild
-              /* keep your custom styles if defined */ className="shadow-sm"
+              /* รักษา style เดิมที่เคยปรับ */
+              className="shadow-sm"
             >
               <Link href="/sign-up" prefetch={false}>
                 เริ่มใช้งานฟรี
@@ -60,7 +67,7 @@ export default function HeroSection() {
           </div>
         </div>
 
-        {/* Stats (use <dl>/<dt>/<dd> for accessibility) */}
+        {/* สถิติสำคัญ 3 ค่า (ใช้ <dl>/<dt>/<dd> เพื่อ semantic + a11y) */}
         <div className="mx-auto mt-12 max-w-2xl sm:mt-16">
           <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="rounded-xl border p-4 text-center">

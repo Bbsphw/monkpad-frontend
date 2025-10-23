@@ -1,13 +1,14 @@
-//src/app/(auth)/sign-in/signIn-client.tsx
+// src/app/(auth)/sign-in/signIn-client.tsx
+
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { Controller, useForm, type SubmitHandler } from "react-hook-form";
+import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Eye, EyeOff, LogIn } from "lucide-react";
-import { signIn } from "next-auth/react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -21,61 +22,127 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Loading } from "@/components/common/loading";
-import { signInSchema, type SignInFormData } from "@/lib/validators";
+import { ForgotPasswordDialog } from "@/components/auth/forgot-password-dialog";
 
-type Props = {
-  redirect?: string; // URL ที่จะไปหลังจากล็อกอินสำเร็จ
+/* ──────────────────────────────────────────────
+ *  Schema: ตรวจสอบข้อมูลฟอร์มล็อกอิน
+ * ──────────────────────────────────────────────
+ * identifier = username
+ * password   = ต้องกรอก
+ * remember   = จำฉันไว้ (optional)
+ */
+const signInClientSchema = z.object({
+  identifier: z.string().min(1, "กรุณากรอกชื่อผู้ใช้"),
+  password: z.string().min(1, "กรุณากรอกรหัสผ่าน"),
+  remember: z.boolean().default(false),
+});
+
+// type input สำหรับ react-hook-form
+type SignInClientForm = z.input<typeof signInClientSchema>;
+
+/* ------------------- Helper ------------------- */
+// ตรวจว่า string เป็น email หรือไม่
+const isEmailLike = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+
+// ปลอดภัยจาก error ที่ไม่รู้ชนิด (unknown)
+const getErrorMessage = (err: unknown): string => {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  return "เกิดข้อผิดพลาด";
 };
 
-export default function SignInClient({ redirect }: Props) {
+/* ──────────────────────────────────────────────
+ *  Component: SignInClient
+ * ──────────────────────────────────────────────
+ * ฟอร์มล็อกอินฝั่ง Client (CSR)
+ * - validate ด้วย zod
+ * - handle UX toast, loading, redirect
+ */
+export default function SignInClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  // ป้องกัน open redirect attack (อนุญาตเฉพาะ path ภายใน)
+  const nextParam = searchParams.get("next");
+  const next =
+    typeof nextParam === "string" && nextParam.startsWith("/")
+      ? nextParam
+      : "/dashboard";
+
+  // state ของ component
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  // form handler
   const {
     register,
     handleSubmit,
     setError,
+    clearErrors,
+    control,
+    watch,
     formState: { errors },
-  } = useForm<SignInFormData>({
-    resolver: zodResolver(signInSchema),
-    defaultValues: { identifier: "", password: "" },
+  } = useForm<SignInClientForm>({
+    resolver: zodResolver(signInClientSchema),
+    defaultValues: { identifier: "", password: "", remember: false },
     mode: "onTouched",
   });
 
-  const onSubmit = async (data: SignInFormData) => {
+  // ค่า email เพื่อส่งให้ dialog "ลืมรหัสผ่าน"
+  const identifier = watch("identifier");
+  const presetEmail = useMemo(
+    () => (isEmailLike(identifier ?? "") ? identifier.trim() : ""),
+    [identifier]
+  );
+
+  /* ------------------- Submit handler ------------------- */
+  const onSubmit: SubmitHandler<SignInClientForm> = async (data) => {
     setSubmitting(true);
-    const callbackUrl = searchParams.get("redirect") || "/dashboard";
+    try {
+      const remember = !!data.remember;
 
-    const res = await signIn("credentials", {
-      redirect: false,
-      identifier: data.identifier,
-      password: data.password,
-      callbackUrl,
-    });
-
-    setSubmitting(false);
-
-    if (!res || res.error) {
-      const msg = res?.error || "ชื่อผู้ใช้/อีเมล หรือรหัสผ่านไม่ถูกต้อง";
-      // ❗ ทำให้ขึ้นแดงทั้งสองช่อง
-      setError("identifier", {
-        message: "กรุณาตรวจสอบชื่อผู้ใช้หรืออีเมลอีกครั้ง",
+      // ส่งข้อมูลเข้าสู่ระบบ
+      const res = await fetch("/api/auth/sign-in", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: data.identifier,
+          password: data.password,
+          remember,
+        }),
       });
-      setError("password", { message: "กรุณาตรวจสอบรหัสผ่านอีกครั้ง" });
-      toast.error("เข้าสู่ระบบไม่สำเร็จ", { description: msg });
-      return;
-    }
 
-    toast.success("เข้าสู่ระบบสำเร็จ");
-    router.replace(res.url ?? callbackUrl);
+      const json = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        error?: { message?: string };
+      } | null;
+
+      if (!res.ok || !json?.ok) {
+        const msg = json?.error?.message || "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง";
+        // set error บนฟอร์ม
+        setError("identifier", { message: "กรุณาตรวจสอบชื่อผู้ใช้อีกครั้ง" });
+        setError("password", { message: "กรุณาตรวจสอบรหัสผ่านอีกครั้ง" });
+        toast.error("เข้าสู่ระบบไม่สำเร็จ", { description: msg });
+        return;
+      }
+
+      toast.success("เข้าสู่ระบบสำเร็จ");
+      router.replace(next);
+    } catch (err: unknown) {
+      toast.error("เข้าสู่ระบบไม่สำเร็จ", {
+        description: getErrorMessage(err),
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
+  /* ------------------- UI ------------------- */
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-soft px-4">
       <Card className="w-full max-w-md shadow-strong">
         <CardHeader className="text-center space-y-2">
+          {/* โลโก้ */}
           <div className="mx-auto w-12 h-12 bg-primary rounded-xl flex items-center justify-center mb-4">
             <LogIn className="h-6 w-6 text-primary-foreground" />
           </div>
@@ -91,13 +158,18 @@ export default function SignInClient({ redirect }: Props) {
             className="space-y-4"
             noValidate
           >
+            {/* USERNAME */}
             <div className="space-y-2">
-              <Label htmlFor="identifier">อีเมลหรือชื่อผู้ใช้</Label>
+              <Label htmlFor="identifier">ชื่อผู้ใช้</Label>
               <Input
                 id="identifier"
-                placeholder="user@example.com หรือ username"
+                placeholder="username"
                 autoComplete="username"
                 {...register("identifier")}
+                onChange={(e) => {
+                  clearErrors("identifier");
+                  register("identifier").onChange(e);
+                }}
                 aria-invalid={!!errors.identifier}
                 className={errors.identifier ? "border-destructive" : ""}
               />
@@ -108,6 +180,7 @@ export default function SignInClient({ redirect }: Props) {
               )}
             </div>
 
+            {/* PASSWORD */}
             <div className="space-y-2">
               <Label htmlFor="password">รหัสผ่าน</Label>
               <div className="relative">
@@ -117,11 +190,16 @@ export default function SignInClient({ redirect }: Props) {
                   placeholder="••••••••"
                   autoComplete="current-password"
                   {...register("password")}
+                  onChange={(e) => {
+                    clearErrors("password");
+                    register("password").onChange(e);
+                  }}
                   aria-invalid={!!errors.password}
                   className={
                     (errors.password ? "border-destructive " : "") + "pr-10"
                   }
                 />
+                {/* ปุ่ม toggle password */}
                 <Button
                   type="button"
                   variant="ghost"
@@ -129,7 +207,6 @@ export default function SignInClient({ redirect }: Props) {
                   className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
                   onClick={() => setShowPassword((v) => !v)}
                   aria-label={showPassword ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
-                  aria-pressed={showPassword}
                 >
                   {showPassword ? (
                     <EyeOff className="h-4 w-4" />
@@ -145,6 +222,38 @@ export default function SignInClient({ redirect }: Props) {
               )}
             </div>
 
+            {/* REMEMBER & FORGOT PASSWORD */}
+            <div className="flex items-center justify-between">
+              <Controller
+                name="remember"
+                control={control}
+                render={({ field }) => (
+                  <label className="flex items-center gap-2 select-none">
+                    <input
+                      id="remember"
+                      type="checkbox"
+                      checked={!!field.value}
+                      onChange={(e) => field.onChange(e.target.checked)}
+                    />
+                    <span className="text-sm">จำฉันไว้ (7 วัน)</span>
+                  </label>
+                )}
+              />
+              <ForgotPasswordDialog
+                asChild
+                trigger={
+                  <button
+                    type="button"
+                    className="text-sm text-primary hover:underline"
+                  >
+                    ลืมรหัสผ่าน?
+                  </button>
+                }
+                presetEmail={presetEmail || undefined}
+              />
+            </div>
+
+            {/* SUBMIT */}
             <Button
               type="submit"
               className="w-full gradient-primary"
@@ -156,17 +265,19 @@ export default function SignInClient({ redirect }: Props) {
                 "เข้าสู่ระบบ"
               )}
             </Button>
-          </form>
 
-          <div className="mt-6 text-center text-sm">
-            <span className="text-muted-foreground">ยังไม่มีบัญชี? </span>
-            <Link
-              href="/sign-up"
-              className="text-primary hover:text-primary-hover font-medium"
-            >
-              สมัครสมาชิก
-            </Link>
-          </div>
+            {/* LINK */}
+            <div className="mt-6 text-center text-sm">
+              <span className="text-muted-foreground">ยังไม่มีบัญชี? </span>
+              <Link
+                href="/sign-up"
+                className="text-primary hover:text-primary-hover font-medium"
+                prefetch={false}
+              >
+                สมัครสมาชิก
+              </Link>
+            </div>
+          </form>
         </CardContent>
       </Card>
     </div>
