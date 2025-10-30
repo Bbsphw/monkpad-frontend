@@ -260,28 +260,14 @@ export function ColumnBarChart({
             {/* Gradient Fill สำหรับสีแท่ง */}
             <defs>
               <linearGradient id="m-income" x1="0" y1="0" x2="0" y2="1">
-                <stop
-                  offset="5%"
-                  stopColor="hsl(var(--chart-1))"
-                  stopOpacity={0.9}
-                />
-                <stop
-                  offset="95%"
-                  stopColor="hsl(var(--chart-1))"
-                  stopOpacity={0.2}
-                />
+                <stop offset="5%" stopColor="#22c55e" stopOpacity={0.8} />{" "}
+                {/* เขียวสด (#22c55e = Tailwind green-500) */}
+                <stop offset="95%" stopColor="#22c55e" stopOpacity={0.1} />
               </linearGradient>
               <linearGradient id="m-expense" x1="0" y1="0" x2="0" y2="1">
-                <stop
-                  offset="5%"
-                  stopColor="hsl(var(--chart-2))"
-                  stopOpacity={0.9}
-                />
-                <stop
-                  offset="95%"
-                  stopColor="hsl(var(--chart-2))"
-                  stopOpacity={0.2}
-                />
+                <stop offset="5%" stopColor="#ef4444" stopOpacity={0.8} />{" "}
+                {/* แดงสด (#ef4444 = Tailwind red-500) */}
+                <stop offset="95%" stopColor="#ef4444" stopOpacity={0.1} />
               </linearGradient>
             </defs>
 

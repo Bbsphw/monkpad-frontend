@@ -1,17 +1,15 @@
-// src/app/(protected)/reports/_components/bar-trend-chart.tsx
-
 "use client";
 
 import * as React from "react";
 import {
   BarChart,
   Bar,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
   LabelList,
 } from "recharts";
 import type {
@@ -39,9 +37,42 @@ import type { CategoryRow } from "../_types/reports";
 export type CategoryPoint = CategoryRow; // { category, expense }
 
 type Metric = "amount" | "percent";
-// type SortKey = "amount" | "percent"; // (ยังไม่ใช้)
 type SortDir = "desc" | "asc";
 type TopN = "5" | "10" | "15";
+
+/* ── Palette สีชัดเจนไม่ซ้ำ ─────────────────────────── */
+const DISTINCT_COLORS = [
+  "#22C55E", // 1
+  "#EF4444", // 2
+  "#3B82F6", // 3
+  "#EAB308", // 4
+  "#8B5CF6", // 5
+  "#14B8A6", // 6
+  "#F97316", // 7
+  "#06B6D4", // 8
+  "#A855F7", // 9
+  "#F43F5E", // 10
+  "#84CC16", // 11
+  "#0EA5E9", // 12
+  "#EC4899", // 13
+  "#F59E0B", // 14
+  "#10B981", // 15
+  "#6366F1", // 16
+  "#D946EF", // 17
+  "#71717A", // 18
+  "#FACC15", // 19
+  "#FB7185", // 20
+  "#0891B2", // 21
+  "#BE123C", // 22
+  "#4ADE80", // 23
+  "#0F766E", // 24
+  "#7C3AED", // 25
+  "#FDE68A", // 26
+  "#0284C7", // 27
+  "#F472B6", // 28
+  "#94A3B8", // 29
+  "#DC2626", // 30
+] as const;
 
 /* ── Utils ───────────────────────────────────────────── */
 
@@ -49,7 +80,8 @@ function formatShort(n: number) {
   const abs = Math.abs(n);
   if (abs >= 1_000_000)
     return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-  if (abs >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
+  if (abs >= 1_000)
+    return `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
   return n.toLocaleString("th-TH");
 }
 
@@ -84,13 +116,12 @@ function estimateYAxisWidth(labels: string[]) {
   return Math.min(260, Math.max(120, Math.round(maxLen * 7.4) + 34));
 }
 
-/** Tick ของแกน Y แบบพิมพ์ type ชัดเจน */
+/** Tick ของแกน Y */
 type RawTickProps = {
   x?: number;
   y?: number;
   payload?: { value?: string | number; index?: number };
 };
-// รับ props จาก Recharts (ซึ่งอาจมีมากกว่านี้) แล้วปรับให้ตรง YTickProps
 const renderYTick = (p: RawTickProps) => (
   <YTick
     x={p.x ?? 0}
@@ -147,6 +178,7 @@ export function BarTrendChart({
   const [topN, setTopN] = React.useState<TopN>(defaultTopN);
   const [query, setQuery] = React.useState("");
 
+  // 1) เตรียมข้อมูลที่จะแสดงในกราฟ (rows)
   const { rows, total } = React.useMemo(() => {
     const safe = Array.isArray(series) ? series : [];
     const grandTotal = safe.reduce(
@@ -160,6 +192,7 @@ export function BarTrendChart({
         )
       : safe;
 
+    // เคสค้นหาแล้วไม่เจอ -> รวมหมวดเล็ก ๆ เป็น "อื่น ๆ"
     if (query.trim() && filtered.length === 0) {
       const threshold = grandTotal * 0.1;
       const othersSum = safe
@@ -180,12 +213,14 @@ export function BarTrendChart({
       return { rows: others, total: othersSum };
     }
 
+    // เติม amount / percent
     const withPercent = filtered.map((r) => ({
       category: r.category,
       amount: Math.max(0, r.expense || 0),
       percent: grandTotal > 0 ? ((r.expense || 0) * 100) / grandTotal : 0,
     }));
 
+    // sort ตาม metric ปัจจุบัน
     const sorted = [...withPercent].sort((a, b) => {
       const av = metric === "percent" ? a.percent : a.amount;
       const bv = metric === "percent" ? b.percent : b.amount;
@@ -193,7 +228,10 @@ export function BarTrendChart({
       return sortDir === "desc" ? bv - av : av - bv;
     });
 
+    // จำกัด topN
     const limited = sorted.slice(0, Number(topN));
+
+    // รวมผลรวมของสิ่งที่แสดง (เอาไว้สรุปด้านล่าง)
     const visibleTotal =
       metric === "percent"
         ? limited.reduce((acc, r) => acc + r.percent, 0)
@@ -202,6 +240,21 @@ export function BarTrendChart({
     return { rows: limited, total: visibleTotal };
   }, [series, query, sortDir, topN, metric]);
 
+  // 2) map category -> สีถาวรของแท่ง
+  const colorMap = React.useMemo(() => {
+    const map: Record<string, string> = {};
+    let colorIndex = 0;
+    for (const r of rows) {
+      const cat = r.category;
+      if (map[cat] === undefined) {
+        map[cat] = DISTINCT_COLORS[colorIndex % DISTINCT_COLORS.length];
+        colorIndex++;
+      }
+    }
+    return map;
+  }, [rows]);
+
+  // 3) layout dynamic สูงตามจำนวนแถว
   const rowHeight = 36;
   const controlsH = 64;
   const baseMin = 300;
@@ -209,7 +262,6 @@ export function BarTrendChart({
     baseMin,
     controlsH + rowHeight * Math.max(rows.length, 4)
   );
-
   const maxBarSize = rows.length <= 5 ? 30 : rows.length <= 10 ? 26 : 22;
 
   if (loading) return <Skeleton className="w-full" style={{ height }} />;
@@ -229,6 +281,7 @@ export function BarTrendChart({
       {/* Controls */}
       <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
+          {/* เลือก metric แสดงผล (จำนวนเงิน / %) */}
           <ToggleGroup
             type="single"
             value={metric}
@@ -240,6 +293,7 @@ export function BarTrendChart({
             <ToggleGroupItem value="percent">เปอร์เซ็นต์</ToggleGroupItem>
           </ToggleGroup>
 
+          {/* เรียง มาก→น้อย / น้อย→มาก */}
           <ToggleGroup
             type="single"
             value={sortDir}
@@ -263,6 +317,7 @@ export function BarTrendChart({
             </ToggleGroupItem>
           </ToggleGroup>
 
+          {/* Top N */}
           <Select value={topN} onValueChange={(v: TopN) => setTopN(v)}>
             <SelectTrigger className="h-8 w-[106px]" aria-label="เลือก Top N">
               <SelectValue placeholder="Top N" />
@@ -275,6 +330,7 @@ export function BarTrendChart({
           </Select>
         </div>
 
+        {/* ช่องค้นหา */}
         <div className="min-w-[200px] sm:w-[260px]">
           <Input
             value={query}
@@ -295,21 +351,6 @@ export function BarTrendChart({
             barCategoryGap={8}
             margin={{ top: 16, right: 16, bottom: 16, left: 8 }}
           >
-            <defs>
-              <linearGradient id="cat-expense" x1="0" y1="0" x2="1" y2="0">
-                <stop
-                  offset="5%"
-                  stopColor="hsl(var(--chart-2))"
-                  stopOpacity={0.85}
-                />
-                <stop
-                  offset="95%"
-                  stopColor="hsl(var(--chart-2))"
-                  stopOpacity={0.25}
-                />
-              </linearGradient>
-            </defs>
-
             <CartesianGrid strokeDasharray="3 3" horizontal vertical={false} />
 
             <XAxis
@@ -320,7 +361,8 @@ export function BarTrendChart({
               width={64}
               tickFormatter={
                 metric === "percent"
-                  ? (v) => `${valueTypeToNumber(v as ValueType).toFixed(0)}%`
+                  ? (v) =>
+                      `${valueTypeToNumber(v as ValueType).toFixed(0)}%`
                   : (v) => formatShort(valueTypeToNumber(v as ValueType))
               }
               domain={metric === "percent" ? [0, 100] : ["auto", "auto"]}
@@ -341,35 +383,28 @@ export function BarTrendChart({
               cursor={{ stroke: "hsl(var(--border))", strokeDasharray: 4 }}
               content={
                 <CustomTooltip
-                  valueFormatter={metric === "percent" ? vfPercent : vfCurrency}
+                  valueFormatter={
+                    metric === "percent" ? vfPercent : vfCurrency
+                  }
                 />
               }
-            />
-
-            <Legend
-              verticalAlign="top"
-              align="right"
-              iconType="circle"
-              wrapperStyle={{ paddingBottom: 6 }}
-              payload={[
-                {
-                  id: metric,
-                  value: metric === "percent" ? "สัดส่วน (%)" : "จำนวนเงิน",
-                  type: "circle",
-                  color: "hsl(var(--chart-2))",
-                },
-              ]}
             />
 
             <Bar
               dataKey={metric === "percent" ? "percent" : "amount"}
               name={metric === "percent" ? "สัดส่วน (%)" : "จำนวนเงิน"}
-              fill="url(#cat-expense)"
-              stroke="hsl(var(--chart-2))"
               radius={[6, 6, 6, 6]}
               maxBarSize={maxBarSize}
               isAnimationActive
             >
+              {rows.map((row, i) => (
+                <Cell
+                  key={`bar-${row.category}-${i}`}
+                  fill={colorMap[row.category]}
+                  stroke={colorMap[row.category]}
+                />
+              ))}
+
               <LabelList
                 dataKey={metric === "percent" ? "percent" : "amount"}
                 position="right"
@@ -385,6 +420,7 @@ export function BarTrendChart({
         </ResponsiveContainer>
       </div>
 
+      {/* summary footer */}
       <div className="mt-2 text-right text-xs text-muted-foreground">
         {metric === "percent"
           ? `สัดส่วนรวมของที่แสดง: ${total.toFixed(1)}%`

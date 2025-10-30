@@ -38,6 +38,16 @@ function formatBaht(value: number): string {
   }).format(value);
 }
 
+export const DISTINCT_COLORS = [
+  "#22C55E", "#EF4444", "#3B82F6", "#EAB308", "#8B5CF6",
+  "#14B8A6", "#F97316", "#06B6D4", "#A855F7", "#F43F5E",
+  "#84CC16", "#0EA5E9", "#EC4899", "#F59E0B", "#10B981",
+  "#6366F1", "#D946EF", "#71717A", "#FACC15", "#FB7185",
+  "#0891B2", "#BE123C", "#4ADE80", "#0F766E", "#7C3AED",
+  "#FDE68A", "#0284C7", "#F472B6", "#94A3B8", "#DC2626",
+] as const;
+
+
 export interface CategoryDonutChartProps {
   data: CategoryRow[];
   title?: string;
@@ -74,6 +84,21 @@ export function CategoryDonutChart({
           })),
     [data, total]
   );
+
+   const colorMap = React.useMemo(() => {
+    const map: Record<string, string> = {};
+    let colorIndex = 0;
+
+    for (const row of withPercent) {
+      const cat = row.category;
+      if (map[cat] === undefined) {
+        map[cat] = DISTINCT_COLORS[colorIndex % DISTINCT_COLORS.length];
+        colorIndex++;
+      }
+    }
+
+    return map;
+  }, [withPercent]);
 
   const hasData = total > 0;
 
@@ -117,10 +142,9 @@ export function CategoryDonutChart({
                     isAnimationActive
                   >
                     {/* 🔵 ใส่สีตาม index */}
-                    {withPercent.map((_, i) => (
-                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                    {withPercent.map((row, i) => (
+                      <Cell key={row.category ?? i} fill={colorMap[row.category]} />
                     ))}
-
                     {/* 🧮 แสดง label “รวมยอดทั้งหมด” ที่กึ่งกลางวง */}
                     <Label
                       position="center"
