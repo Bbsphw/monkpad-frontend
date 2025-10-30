@@ -18,6 +18,7 @@ import { useTransactionsContext } from "./transaction-filters";
 import { cn } from "@/lib/utils";
 import TransactionEditDialog from "./transaction-edit-dialog";
 import TransactionDeleteDialog from "./transaction-delete-dialog";
+import { useTags } from "@/hooks/use-tags";
 
 /** formatter: แสดงจำนวนเงินเป็นสกุลบาทแบบ locale-aware */
 function formatTHB(n: number) {
@@ -37,6 +38,8 @@ export default function TransactionTable() {
   // - reload: ใช้รีเฟรชข้อมูลเมื่อมี CRUD
   // const { rows, loading, pagination, setFilter, reload } =
   const { rows, loading, pagination, setFilter } = useTransactionsContext();
+
+  const { tags } = useTags();
 
   /* ───────────────── Skeleton ระหว่างโหลด ─────────────────
    * แยก branch ชัดเจน ลด layout shift และทำให้ผู้ใช้เข้าใจว่ากำลังโหลด
@@ -89,6 +92,13 @@ export default function TransactionTable() {
           <TableBody>
             {rows.map((r) => {
               const isIncome = r.type === "income";
+
+              // หาจากชื่อหมวด เพื่อเดา id
+              const matchedTag = tags.find(
+                (t) => t.tag === r.category && t.type === r.type
+              );
+              const tagIdForThisRow = matchedTag ? matchedTag.id : undefined;
+
               return (
                 <TableRow
                   key={r.id}
@@ -157,6 +167,8 @@ export default function TransactionTable() {
                           note: r.note ?? "",
                           date: r.date,
                           time: r.time?.slice(0, 5) ?? "12:00",
+                          tag_id: tagIdForThisRow as number, // 👈 เราพยายามส่ง id
+                          type: r.type,
                         }}
                         // onUpdated={reload} // ถ้าต้องการให้ตารางรีเฟรชทันที ใช้ callback นี้ได้
                         size="icon"

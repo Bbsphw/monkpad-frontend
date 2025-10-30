@@ -14,7 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Calendar as CalendarIcon, Pencil } from "lucide-react";
+import { Calendar as CalendarIcon, Pencil, Plus, Trash2 } from "lucide-react";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller, useForm, type Resolver } from "react-hook-form";
@@ -29,6 +29,28 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 
+// 🔥 NEW: import select ui + textarea? (ไม่มี textarea ที่นี่ แต่เราต้องใช้ Select)
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+// 🔥 NEW: คุณมี hook useTags ใน UploadImage
+import { useTags } from "@/hooks/use-tags";
+
+// 🔥 NEW: util สำหรับข้อความ error ที่ไม่ any
+function getErrorMessage(err: unknown, fallback = "เกิดข้อผิดพลาด"): string {
+  if (err instanceof Error) return err.message || fallback;
+  if (typeof err === "string") return err || fallback;
+  return fallback;
+}
+
+// 🔥 NEW: กันลบหมวด default
+const DEFAULT_TAGS = new Set(["รายรับอื่นๆ", "รายจ่ายอื่นๆ"]);
+
 /* ───────────────────────────────── Zod schema ─────────────────────────────────
  * - ใช้ z.coerce เพื่อรองรับค่า string/unknown จากอินพุต แล้วแปลงเป็นชนิดที่ต้องการ
  * - แยก "input type" และ "output type" ชัดเจนเพื่อให้ react-hook-form รู้ชนิดตอน validate
@@ -38,6 +60,14 @@ const FormSchema = z.object({
   note: z.string().max(500).optional(),
   date: z.coerce.date(), // รับ unknown แล้ว coerce เป็น Date
   time: z.string().regex(/^\d{2}:\d{2}$/, "เวลาไม่ถูกต้อง (HH:MM)"),
+  tag_id: z.coerce
+    .number()
+    .refine(Number.isFinite, { message: "กรุณาเลือกหมวดหมู่" })
+    .int({ message: "กรุณาเลือกหมวดหมู่" })
+    .positive({ message: "กรุณาเลือกหมวดหมู่" }),
+
+  // 🔥 NEW: ประเภทรายรับ/รายจ่าย -> เพื่อกรองแท็ก
+  type: z.enum(["income", "expense"]),
 });
 
 // ชนิดที่ form รับเข้ามาก่อน coerce (ตรงกับค่าจากอินพุต)
@@ -56,6 +86,9 @@ type Props = {
     note?: string;
     date: string; // "YYYY-MM-DD"
     time?: string; // "HH:MM"
+    // 🔥 NEW:
+    tag_id: number; // หมวดหมู่ปัจจุบันของรายการนี้
+    type: "income" | "expense"; // ประเภทปัจจุบันของรายการนี้
   };
   onUpdated?: () => void; // เผื่อให้ผู้ใช้ component ส่ง callback มาเอง
   size?: "icon" | "sm" | "default";
@@ -70,6 +103,14 @@ export default function TransactionEditDialog({
 }: Props) {
   const [open, setOpen] = React.useState(false);
 
+  // 🔥 NEW: state สำหรับเพิ่มหมวดใหม่ + ลบหมวด
+  const [isAddingCategory, setIsAddingCategory] = React.useState(false);
+  const [newCategoryName, setNewCategoryName] = React.useState("");
+  const [deleting, setDeleting] = React.useState(false);
+
+  // 🔥 NEW: ดึง tags ทั้งหมดจากระบบ (ใช้ hook เดิมของคุณ)
+  const { tags, mutate } = useTags();
+
   /* ------------------------------------------------------------------------
    * useForm:
    * - ใช้ resolver ที่ map FormInput -> FormOutput (ผ่าน zodResolver)
@@ -79,7 +120,9 @@ export default function TransactionEditDialog({
   const {
     control,
     handleSubmit,
-    formState: { isSubmitting },
+    watch,
+    setValue,
+    formState: { isSubmitting, errors },
     reset,
   } = useForm<FormOutput>({
     resolver: zodResolver(FormSchema) as unknown as Resolver<FormOutput>,
@@ -88,9 +131,22 @@ export default function TransactionEditDialog({
       note: defaultValues.note ?? "",
       date: toDate(defaultValues.date) ?? new Date(), // ให้ค่าเป็น Date เพื่อสอดคล้องกับ FormOutput
       time: (defaultValues.time ?? "12:00").slice(0, 5),
+      // 🔥 NEW:
+      tag_id: defaultValues.tag_id,
+      type: defaultValues.type,
     },
     mode: "onChange",
   });
+
+  // 🔥 NEW: ใช้ watch เพื่องาน UI
+  const selectedTagId = watch("tag_id");
+  const type = watch("type");
+
+  // 🔥 NEW: กรอง tags ตาม type ปัจจุบัน
+  const typeTags = React.useMemo(
+    () => tags.filter((t) => t.type === type),
+    [tags, type]
+  );
 
   /* ------------------------------------------------------------------------
    * onSubmit:
@@ -106,6 +162,9 @@ export default function TransactionEditDialog({
         note: values.note ?? "",
         date: format(values.date, "yyyy-MM-dd"),
         time: values.time,
+        // 🔥 NEW:
+        tag_id: values.tag_id,
+        type: values.type,
       };
 
       const res = await fetch(`/api/transactions/update/${id}`, {
@@ -153,9 +212,91 @@ export default function TransactionEditDialog({
         note: defaultValues.note ?? "",
         date: toDate(defaultValues.date) ?? new Date(), // ให้ค่าเป็น Date เพื่อสอดคล้องกับ FormOutput
         time: (defaultValues.time ?? "12:00").slice(0, 5),
+        // 🔥 NEW:
+        tag_id: defaultValues.tag_id,
+        type: defaultValues.type,
       });
     }
   }, [open, defaultValues, reset]);
+
+  /* ------------------------------------------------------------------------
+   * addCategory(): เพิ่มหมวดใหม่ให้ type ปัจจุบัน
+   * --------------------------------------------------------------------- */
+  async function addCategory() {
+    const name = newCategoryName.trim();
+    if (!name) return;
+
+    try {
+      const res = await fetch("/api/tags/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tag: name, type }), // type จาก watch("type")
+      });
+      const json = await res.json().catch(() => null);
+
+      if (!res.ok || !json?.ok) {
+        const msg =
+          (json && "error" in json && json.error?.message) ||
+          "เพิ่มหมวดหมู่ไม่สำเร็จ";
+        throw new Error(msg);
+      }
+
+      toast.success("เพิ่มหมวดหมู่สำเร็จ");
+      setNewCategoryName("");
+      setIsAddingCategory(false);
+      await mutate(); // reload tags (useTags)
+    } catch (err: unknown) {
+      toast.error("เพิ่มหมวดหมู่ไม่สำเร็จ", {
+        description: getErrorMessage(err, "เกิดข้อผิดพลาด"),
+      });
+    }
+  }
+
+  /* ------------------------------------------------------------------------
+   * deleteCategory(): ลบหมวดที่เลือก
+   * --------------------------------------------------------------------- */
+  async function deleteCategory() {
+    const selectedIdNum = Number(selectedTagId || 0);
+    const tag = tags.find((t) => t.id === selectedIdNum);
+    if (!tag) return;
+
+    if (DEFAULT_TAGS.has(tag.tag)) {
+      toast.error("ไม่สามารถลบหมวดหมู่เริ่มต้นได้");
+      return;
+    }
+
+    const ok = window.confirm(
+      `ต้องการลบหมวดหมู่ “${tag.tag}” หรือไม่?\nธุรกรรมทั้งหมดจะถูกย้ายไปหมวดเริ่มต้นของประเภทเดียวกัน`
+    );
+    if (!ok) return;
+
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/tags/delete/${tag.id}`, {
+        method: "DELETE",
+      });
+      const json = await res.json().catch(() => null);
+
+      if (!res.ok || !json?.ok) {
+        const msg =
+          (json && "error" in json && json.error?.message) ||
+          "ลบหมวดหมู่ไม่สำเร็จ";
+        throw new Error(msg);
+      }
+
+      toast.success("ลบหมวดหมู่สำเร็จ");
+      await mutate(); // reload tag list
+      setValue("tag_id", undefined as unknown as number, {
+        shouldValidate: true,
+      });
+    } catch (err: unknown) {
+      toast.error("ลบหมวดหมู่ไม่สำเร็จ", {
+        description: getErrorMessage(err, "เกิดข้อผิดพลาด"),
+      });
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   /* ------------------------------------------------------------------------
    * toDate: แปลงค่าที่อาจเป็น string/Date/undefined → Date | undefined
@@ -286,6 +427,145 @@ export default function TransactionEditDialog({
                   </>
                 )}
               />
+            </div>
+          </div>
+
+          {/* 🔥 NEW: Category & Type block (ใส่ไว้ "เหนือรายละเอียดโน้ต") */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>หมวดหมู่ *</Label>
+
+              <div className="flex items-center gap-2">
+                {/* ปุ่มเข้าโหมดเพิ่มหมวด */}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsAddingCategory(true)}
+                >
+                  <Plus className="mr-1 h-3 w-3" /> เพิ่มหมวดหมู่
+                </Button>
+
+                {/* ปุ่มลบหมวด ถ้ามีเลือกอยู่ */}
+                {selectedTagId ? (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    onClick={deleteCategory}
+                    disabled={deleting}
+                  >
+                    <Trash2 className="mr-1 h-3 w-3" />
+                    {deleting ? "กำลังลบ..." : "ลบหมวดหมู่"}
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+
+            {/* ประเภท (รายรับ/รายจ่าย) */}
+
+            <Label>ประเภท *</Label>
+            <div className="flex flex-row items-start">
+              <div className="flex-none mr-3">
+                <Controller
+                  control={control}
+                  name="type"
+                  render={({ field }) => (
+                    <Select
+                      value={field.value}
+                      onValueChange={(val) => {
+                        // เปลี่ยน type แล้วต้องเคลียร์ tag_id เพราะหมวดเปลี่ยนเซ็ต
+                        field.onChange(val);
+                        setValue("tag_id", undefined as unknown as number, {
+                          shouldValidate: true,
+                        });
+                      }}
+                    >
+                      <SelectTrigger >
+                        <SelectValue placeholder="เลือกประเภท" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="income">รายรับ</SelectItem>
+                        <SelectItem value="expense">รายจ่าย</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                {errors.type && (
+                  <p className="text-xs text-destructive mt-1">
+                    {errors.type.message as string}
+                  </p>
+                )}
+              </div>
+
+              {/* โหมดกำลังเพิ่มหมวดใหม่ */}
+              <div className="flex-none">
+                {isAddingCategory ? (
+                  <div className="flex gap-2 ml-0.5">
+                    <Input
+                      value={newCategoryName}
+                      onChange={(e) => setNewCategoryName(e.target.value)}
+                      placeholder="ชื่อหมวดหมู่ใหม่"
+                    />
+                    <Button
+                      onClick={addCategory}
+                      disabled={!newCategoryName.trim()}
+                    >
+                      เพิ่ม
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setIsAddingCategory(false);
+                        setNewCategoryName("");
+                      }}
+                    >
+                      ยกเลิก
+                    </Button>
+                  </div>
+                ) : (
+                  // ดรอปดาวน์เลือกหมวดตาม type
+                  <Controller
+                    control={control}
+                    name="tag_id"
+                    render={({ field }) => (
+                      <Select
+                        value={field.value ? String(field.value) : ""}
+                        onValueChange={(val) => field.onChange(Number(val))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue
+                            placeholder={
+                              typeTags.length === 0
+                                ? "ยังไม่มีหมวดหมู่ — เพิ่มหมวดหมู่ก่อน"
+                                : "เลือกหมวดหมู่"
+                            }
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {typeTags.length === 0 ? (
+                            <div className="p-2 text-sm text-muted-foreground">
+                              ยังไม่มีหมวดหมู่ของประเภทนี้
+                            </div>
+                          ) : (
+                            typeTags.map((t) => (
+                              <SelectItem key={t.id} value={String(t.id)}>
+                                {t.tag}
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                )}
+
+                {errors.tag_id && (
+                  <p className="text-xs text-destructive mt-1">
+                    {errors.tag_id.message as string}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
 
