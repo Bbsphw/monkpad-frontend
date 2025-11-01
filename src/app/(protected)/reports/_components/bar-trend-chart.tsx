@@ -42,8 +42,8 @@ type TopN = "5" | "10" | "15";
 
 /* ── Palette สีชัดเจนไม่ซ้ำ ─────────────────────────── */
 const DISTINCT_COLORS = [
-  "#22C55E", // 1
-  "#EF4444", // 2
+  "#6495ED", // 1
+  "#FFDAB9", // 2
   "#3B82F6", // 3
   "#EAB308", // 4
   "#8B5CF6", // 5
@@ -349,7 +349,7 @@ export function BarTrendChart({
             layout="vertical"
             barGap={6}
             barCategoryGap={8}
-            margin={{ top: 16, right: 16, bottom: 16, left: 8 }}
+            margin={{ top: 16, right: 48, bottom: 16, left: 8 }}
           >
             <CartesianGrid strokeDasharray="3 3" horizontal vertical={false} />
 
