@@ -481,7 +481,7 @@ export default function TransactionEditDialog({
                         });
                       }}
                     >
-                      <SelectTrigger >
+                      <SelectTrigger>
                         <SelectValue placeholder="เลือกประเภท" />
                       </SelectTrigger>
                       <SelectContent>
@@ -508,12 +508,14 @@ export default function TransactionEditDialog({
                       placeholder="ชื่อหมวดหมู่ใหม่"
                     />
                     <Button
+                      type="button"
                       onClick={addCategory}
                       disabled={!newCategoryName.trim()}
                     >
                       เพิ่ม
                     </Button>
                     <Button
+                      type="button"
                       variant="outline"
                       onClick={() => {
                         setIsAddingCategory(false);
@@ -600,4 +602,3 @@ export default function TransactionEditDialog({
   );
 }
 
-//send to main file
