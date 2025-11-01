@@ -21,13 +21,13 @@ import {
 import { cn } from "@/lib/utils";
 
 /** 🎨 ชุดสีหลักสำหรับ PieChart ดึงจาก CSS variable เพื่อรองรับ dark mode */
-const COLORS = [
-  "hsl(var(--chart-1))",
-  "hsl(var(--chart-2))",
-  "hsl(var(--chart-3))",
-  "hsl(var(--chart-4))",
-  "hsl(var(--chart-5))",
-] as const;
+// const COLORS = [
+//   "hsl(var(--chart-1))",
+//   "hsl(var(--chart-2))",
+//   "hsl(var(--chart-3))",
+//   "hsl(var(--chart-4))",
+//   "hsl(var(--chart-5))",
+// ] as const;
 
 /** 💰 ฟังก์ชัน format เงินเป็นบาท (ไม่แสดงทศนิยม) */
 function formatBaht(value: number): string {
@@ -39,14 +39,37 @@ function formatBaht(value: number): string {
 }
 
 export const DISTINCT_COLORS = [
-  "#22C55E", "#EF4444", "#3B82F6", "#EAB308", "#8B5CF6",
-  "#14B8A6", "#F97316", "#06B6D4", "#A855F7", "#F43F5E",
-  "#84CC16", "#0EA5E9", "#EC4899", "#F59E0B", "#10B981",
-  "#6366F1", "#D946EF", "#71717A", "#FACC15", "#FB7185",
-  "#0891B2", "#BE123C", "#4ADE80", "#0F766E", "#7C3AED",
-  "#FDE68A", "#0284C7", "#F472B6", "#94A3B8", "#DC2626",
+  "#22C55E",
+  "#EF4444",
+  "#3B82F6",
+  "#EAB308",
+  "#8B5CF6",
+  "#14B8A6",
+  "#F97316",
+  "#06B6D4",
+  "#A855F7",
+  "#F43F5E",
+  "#84CC16",
+  "#0EA5E9",
+  "#EC4899",
+  "#F59E0B",
+  "#10B981",
+  "#6366F1",
+  "#D946EF",
+  "#71717A",
+  "#FACC15",
+  "#FB7185",
+  "#0891B2",
+  "#BE123C",
+  "#4ADE80",
+  "#0F766E",
+  "#7C3AED",
+  "#FDE68A",
+  "#0284C7",
+  "#F472B6",
+  "#94A3B8",
+  "#DC2626",
 ] as const;
-
 
 export interface CategoryDonutChartProps {
   data: CategoryRow[];
@@ -85,7 +108,7 @@ export function CategoryDonutChart({
     [data, total]
   );
 
-   const colorMap = React.useMemo(() => {
+  const colorMap = React.useMemo(() => {
     const map: Record<string, string> = {};
     let colorIndex = 0;
 
@@ -143,7 +166,10 @@ export function CategoryDonutChart({
                   >
                     {/* 🔵 ใส่สีตาม index */}
                     {withPercent.map((row, i) => (
-                      <Cell key={row.category ?? i} fill={colorMap[row.category]} />
+                      <Cell
+                        key={row.category ?? i}
+                        fill={colorMap[row.category]}
+                      />
                     ))}
                     {/* 🧮 แสดง label “รวมยอดทั้งหมด” ที่กึ่งกลางวง */}
                     <Label
