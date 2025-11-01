@@ -602,4 +602,3 @@ export default function TransactionEditDialog({
   );
 }
 
-//send to main file
