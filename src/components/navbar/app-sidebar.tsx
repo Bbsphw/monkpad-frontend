@@ -76,7 +76,7 @@ export function AppSidebar({ user }: { user: AppSidebarUser }) {
       </SidebarMenu>
 
       {/* เนื้อหาเมนูหลัก */}
-      <SidebarContent>
+      <SidebarContent className="mt-6 text-[19px] [&_svg]:h-8 [&_svg]:w-8">
         <SidebarGroup>
           <NavMain items={navMain} />
         </SidebarGroup>

@@ -59,7 +59,7 @@ export function NavMain({ items }: { items: NavItem[] }) {
   return (
     <SidebarGroup>
       <SidebarGroupContent className="flex flex-col gap-2">
-        <SidebarMenu>
+        <SidebarMenu className="space-y-4">
           {items.map((item) => {
             const Icon = item.icon;
 
@@ -110,6 +110,7 @@ export function NavMain({ items }: { items: NavItem[] }) {
                   asChild
                   tooltip={item.title}
                   data-active={active}
+                  className="text-[19px] font-medium [&_svg]:h-8 [&_svg]:w-8 gap-3"
                 >
                   <Link
                     href={item.url}

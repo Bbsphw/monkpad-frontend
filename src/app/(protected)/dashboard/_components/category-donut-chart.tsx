@@ -39,8 +39,8 @@ function formatBaht(value: number): string {
 }
 
 export const DISTINCT_COLORS = [
-  "#22C55E",
-  "#EF4444",
+  "#6495ED",
+  "#FFDAB9",
   "#3B82F6",
   "#EAB308",
   "#8B5CF6",
