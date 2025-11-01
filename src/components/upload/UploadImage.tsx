@@ -656,7 +656,7 @@ export default function UploadImage({ onSuccess }: UploadImageProps) {
                         }
                       />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="max-h-48 overflow-y-auto">
                       {typeTags.length === 0 ? (
                         <div className="p-2 text-sm text-muted-foreground">
                           ยังไม่มีหมวดหมู่ของประเภทนี้

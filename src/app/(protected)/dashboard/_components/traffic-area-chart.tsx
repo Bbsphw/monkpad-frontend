@@ -165,28 +165,14 @@ export function TrafficAreaChart({
               {/* ── Gradient สำหรับพื้นที่ใต้เส้น (อ่านง่าย + กลมกลืนกับธีม) ── */}
               <defs>
                 <linearGradient id="income" x1="0" y1="0" x2="0" y2="1">
-                  <stop
-                    offset="5%"
-                    stopColor="hsl(var(--chart-1))"
-                    stopOpacity={0.8}
-                  />
-                  <stop
-                    offset="95%"
-                    stopColor="hsl(var(--chart-1))"
-                    stopOpacity={0.1}
-                  />
+                  <stop offset="5%" stopColor="#22c55e" stopOpacity={0.8} />{" "}
+                  {/* เขียวสด (#22c55e = Tailwind green-500) */}
+                  <stop offset="95%" stopColor="#22c55e" stopOpacity={0.1} />
                 </linearGradient>
                 <linearGradient id="expense" x1="0" y1="0" x2="0" y2="1">
-                  <stop
-                    offset="5%"
-                    stopColor="hsl(var(--chart-2))"
-                    stopOpacity={0.8}
-                  />
-                  <stop
-                    offset="95%"
-                    stopColor="hsl(var(--chart-2))"
-                    stopOpacity={0.1}
-                  />
+                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.8} />{" "}
+                  {/* แดงสด (#ef4444 = Tailwind red-500) */}
+                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0.1} />
                 </linearGradient>
               </defs>
 
@@ -236,7 +222,7 @@ export function TrafficAreaChart({
                   type="monotone"
                   dataKey="income"
                   name="รายรับ"
-                  stroke="hsl(var(--chart-1))"
+                  stroke="#22c55e"
                   fill="url(#income)"
                   strokeWidth={2}
                   dot={false}
@@ -250,7 +236,7 @@ export function TrafficAreaChart({
                   type="monotone"
                   dataKey="expense"
                   name="รายจ่าย"
-                  stroke="hsl(var(--chart-2))"
+                  stroke="#ef4444"
                   fill="url(#expense)"
                   strokeWidth={2}
                   dot={false}
